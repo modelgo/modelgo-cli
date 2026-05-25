@@ -10,6 +10,8 @@ The official CLI for modelgo. Pairs with AI agent skills (Claude Code, Codex, Ge
 npx @modelgo/cli@latest install
 ```
 
+> **Pre-release / internal testing**: `@modelgo/cli` is currently published to GitHub Packages, not public npm. Internal testers need a one-time `.npmrc` setup — see [docs/INTERNAL_TESTING.md](./docs/INTERNAL_TESTING.md).
+
 This runs an interactive wizard that:
 
 1. Installs `@modelgo/cli` globally via npm (which downloads the Go binary from GitHub Releases).
