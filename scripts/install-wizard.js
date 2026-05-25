@@ -7,6 +7,11 @@ const p = require("@clack/prompts");
 const { semverLessThan } = require("./install.js");
 
 const PKG = "@model-go/cli";
+// PKG_VERSION is the version of the wizard CURRENTLY EXECUTING. The wizard
+// pins step1's `npm install -g` to this exact version so that
+// `npx @model-go/cli@rc install` installs the rc version globally,
+// not whatever the @latest dist-tag happens to resolve to.
+const PKG_VERSION = require("../package.json").version;
 const SKILLS_REPO = "modelgo/modelgo-cli";
 const isWindows = process.platform === "win32";
 
@@ -76,16 +81,6 @@ function runSilentAsync(cmd, args, opts = {}) {
 function fmt(template, ...values) {
   let i = 0;
   return template.replace(/%s/g, () => values[i++] ?? "");
-}
-
-function getLatestVersion() {
-  try {
-    const out = runSilent("npm", ["view", PKG, "version"], { timeout: 15000 });
-    const ver = out.toString().trim();
-    return /^\d+\.\d+\.\d+/.test(ver) ? ver : null;
-  } catch (_) {
-    return null;
-  }
 }
 
 function getGloballyInstalledVersion() {
@@ -162,8 +157,7 @@ function reportFail(isInteractive, spinner, message, err) {
 
 async function stepInstallGlobally(msg, isInteractive) {
   const installedVer = getGloballyInstalledVersion();
-  const latestVer = getLatestVersion();
-  const needsUpgrade = installedVer && latestVer && semverLessThan(installedVer, latestVer);
+  const needsUpgrade = installedVer && semverLessThan(installedVer, PKG_VERSION);
 
   if (installedVer && !needsUpgrade) {
     const skipMsg = fmt(msg.step1Skip, installedVer);
@@ -173,13 +167,16 @@ async function stepInstallGlobally(msg, isInteractive) {
   }
 
   const startMsg = needsUpgrade
-    ? fmt(msg.step1Upgrade, PKG, installedVer, latestVer)
+    ? fmt(msg.step1Upgrade, PKG, installedVer, PKG_VERSION)
     : fmt(msg.step1, PKG);
-  const doneMsg = needsUpgrade ? fmt(msg.step1Upgraded, latestVer) : msg.step1Done;
+  const doneMsg = needsUpgrade ? fmt(msg.step1Upgraded, PKG_VERSION) : msg.step1Done;
 
   const s = reportStart(isInteractive, startMsg);
   try {
-    await runSilentAsync("npm", ["install", "-g", PKG], { timeout: 120000 });
+    // Pin to PKG_VERSION (the wizard's own version) so that
+    // `npx @model-go/cli@rc install` installs the rc version globally,
+    // not whatever the @latest dist-tag currently resolves to.
+    await runSilentAsync("npm", ["install", "-g", `${PKG}@${PKG_VERSION}`], { timeout: 120000 });
     reportStop(isInteractive, s, doneMsg);
   } catch (err) {
     reportFail(isInteractive, s, fmt(msg.step1Fail, PKG), err);

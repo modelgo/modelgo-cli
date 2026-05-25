@@ -54,6 +54,18 @@ jobs:
           npm version "$VERSION" --no-git-tag-version --allow-same-version
 
       - name: Publish to npm
-        run: npm publish --access public
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Pre-release (v0.1.2-rc.1, v0.1.2-beta.1, etc.) goes to a named
+          # dist-tag derived from the suffix, so stable @latest users are
+          # unaffected. Stable versions (v0.1.2) use the default @latest.
+          if [[ "$VERSION" == *-* ]]; then
+            DIST_TAG=$(echo "$VERSION" | sed -E 's/.*-([a-z]+).*/\1/')
+            echo "Pre-release: publishing @model-go/cli@$VERSION --tag $DIST_TAG"
+            npm publish --access public --tag "$DIST_TAG"
+          else
+            echo "Stable: publishing @model-go/cli@$VERSION --tag latest"
+            npm publish --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
