@@ -105,7 +105,7 @@ function getGloballyInstalledVersion() {
   try {
     const out = runSilent("npm", ["list", "-g", PKG], { timeout: 15000 });
     const match = out.toString().match(/@(\d+\.\d+\.\d+[^\s]*)/);
-    return match ? match[1] : "unknown";
+    return match ? match[1] : null;
   } catch (_) {
     return null;
   }
@@ -179,7 +179,7 @@ async function stepInstallGlobally(msg) {
 async function skillsAlreadyInstalled() {
   try {
     const out = await runSilentAsync("npx", ["-y", "skills", "ls", "-g"], { timeout: 120000 });
-    return /^modelgo-/m.test(out.toString());
+    return /(^|\s)modelgo-/m.test(out.toString());
   } catch (_) {
     return false;
   }
