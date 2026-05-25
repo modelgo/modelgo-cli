@@ -1,0 +1,41 @@
+{
+  "name": "@modelgo/cli",
+  "version": "0.1.0",
+  "description": "The official CLI for modelgo. Pairs with AI agent skills so AI agents can operate modelgo on your behalf.",
+  "bin": {
+    "modelgo-cli": "scripts/run.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.js",
+    "test": "node --test scripts/__tests__/*.test.mjs",
+    "lint:skills": "node scripts/lint-skills.mjs"
+  },
+  "files": [
+    "scripts/install.js",
+    "scripts/install-wizard.js",
+    "scripts/run.js",
+    "checksums.txt",
+    "LICENSE",
+    "README.md"
+  ],
+  "os": ["darwin", "linux", "win32"],
+  "cpu": ["x64", "arm64"],
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.2.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/modelgo/modelgo-cli.git"
+  },
+  "homepage": "https://github.com/modelgo/modelgo-cli#readme",
+  "bugs": {
+    "url": "https://github.com/modelgo/modelgo-cli/issues"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}
