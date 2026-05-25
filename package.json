@@ -28,7 +28,7 @@
     "arm64"
   ],
   "engines": {
-    "node": ">=16"
+    "node": ">=20.12"
   },
   "dependencies": {
     "@clack/prompts": "^1.2.0"
