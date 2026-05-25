@@ -7,7 +7,7 @@ const { execFileSync } = require("child_process");
 const os = require("os");
 const crypto = require("crypto");
 
-const VERSION = require("../package.json").version.replace(/-.*$/, "");
+const VERSION = require("../package.json").version;
 const REPO = "modelgo/modelgo-cli";
 const NAME = "modelgo-cli";
 const DEFAULT_MIRROR_HOST = "https://registry.npmmirror.com";
