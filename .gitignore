@@ -1,0 +1,14 @@
+# Go build output (downloaded by postinstall at user install time)
+bin/
+*.exe
+
+# GoReleaser output
+dist/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
