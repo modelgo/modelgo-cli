@@ -124,10 +124,34 @@ test("verifyChecksum: null hash skips verification (warning path)", () => {
   assert.doesNotThrow(() => verifyChecksum("/nonexistent", null));
 });
 
-test("semverLessThan: numeric comparison", () => {
+test("semverLessThan: core X.Y.Z numeric comparison", () => {
   assert.equal(semverLessThan("1.0.0", "1.0.1"), true);
   assert.equal(semverLessThan("1.0.1", "1.0.0"), false);
   assert.equal(semverLessThan("1.0.0", "1.0.0"), false);
   assert.equal(semverLessThan("1.10.0", "1.9.0"), false);
-  assert.equal(semverLessThan("2.0.0-beta", "2.0.0"), false); // pre-release suffix stripped
+});
+
+test("semverLessThan: pre-release ranks below release at same X.Y.Z", () => {
+  assert.equal(semverLessThan("2.0.0-beta", "2.0.0"), true);
+  assert.equal(semverLessThan("2.0.0", "2.0.0-beta"), false);
+  assert.equal(semverLessThan("0.1.0-rc.3", "0.1.0"), true);
+  assert.equal(semverLessThan("0.1.0", "0.1.0-rc.3"), false);
+});
+
+test("semverLessThan: pre-release identifiers compared correctly", () => {
+  // Numeric identifiers compared numerically (rc.10 > rc.9, not lex)
+  assert.equal(semverLessThan("0.1.0-rc.9", "0.1.0-rc.10"), true);
+  assert.equal(semverLessThan("0.1.0-rc.10", "0.1.0-rc.9"), false);
+  assert.equal(semverLessThan("0.1.0-rc.3", "0.1.0-rc.4"), true);
+  // Identical pre-release
+  assert.equal(semverLessThan("0.1.0-rc.3", "0.1.0-rc.3"), false);
+  // Shorter pre-release identifier list ranks below longer (alpha < alpha.1)
+  assert.equal(semverLessThan("1.0.0-alpha", "1.0.0-alpha.1"), true);
+  // Numeric identifier < alphanumeric (rc.1 < rc.alpha)
+  assert.equal(semverLessThan("1.0.0-rc.1", "1.0.0-rc.alpha"), true);
+});
+
+test("semverLessThan: core difference dominates pre-release suffix", () => {
+  assert.equal(semverLessThan("0.1.0-rc.3", "0.1.1"), true);
+  assert.equal(semverLessThan("0.1.1", "0.1.0-rc.3"), false);
 });

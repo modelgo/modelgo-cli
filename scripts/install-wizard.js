@@ -2,10 +2,9 @@
 // Copyright (c) 2026 modelgo
 // SPDX-License-Identifier: MIT
 
-const fs = require("fs");
-const path = require("path");
 const { execFileSync, execFile } = require("child_process");
 const p = require("@clack/prompts");
+const { semverLessThan } = require("./install.js");
 
 const PKG = "@modelgo/cli";
 const SKILLS_REPO = "modelgo/modelgo-cli";
@@ -91,16 +90,6 @@ function getLatestVersion() {
   }
 }
 
-function semverLessThan(a, b) {
-  const pa = a.replace(/-.*$/, "").split(".").map(Number);
-  const pb = b.replace(/-.*$/, "").split(".").map(Number);
-  for (let i = 0; i < 3; i++) {
-    if ((pa[i] || 0) < (pb[i] || 0)) return true;
-    if ((pa[i] || 0) > (pb[i] || 0)) return false;
-  }
-  return false;
-}
-
 function getGloballyInstalledVersion() {
   try {
     const out = runSilent("npm", ["list", "-g", PKG], { timeout: 15000 });
@@ -151,27 +140,51 @@ async function stepSelectLang() {
   return handleCancel(lang, messages.zh);
 }
 
-async function stepInstallGlobally(msg) {
+function reportStart(isInteractive, message) {
+  if (!isInteractive) {
+    console.log(message);
+    return null;
+  }
+  const s = p.spinner();
+  s.start(message);
+  return s;
+}
+
+function reportStop(isInteractive, spinner, message) {
+  if (isInteractive && spinner) spinner.stop(message);
+  else console.log(message);
+}
+
+function reportFail(isInteractive, spinner, message, err) {
+  if (isInteractive && spinner) spinner.stop(message);
+  else console.error(message);
+  const stderr = err && err.stderr ? err.stderr.toString().trim() : "";
+  if (stderr) console.error("\n" + stderr);
+}
+
+async function stepInstallGlobally(msg, isInteractive) {
   const installedVer = getGloballyInstalledVersion();
   const latestVer = getLatestVersion();
   const needsUpgrade = installedVer && latestVer && semverLessThan(installedVer, latestVer);
 
   if (installedVer && !needsUpgrade) {
-    p.log.info(fmt(msg.step1Skip, installedVer));
+    const skipMsg = fmt(msg.step1Skip, installedVer);
+    if (isInteractive) p.log.info(skipMsg);
+    else console.log(skipMsg);
     return;
   }
 
-  const s = p.spinner();
-  if (needsUpgrade) {
-    s.start(fmt(msg.step1Upgrade, PKG, installedVer, latestVer));
-  } else {
-    s.start(fmt(msg.step1, PKG));
-  }
+  const startMsg = needsUpgrade
+    ? fmt(msg.step1Upgrade, PKG, installedVer, latestVer)
+    : fmt(msg.step1, PKG);
+  const doneMsg = needsUpgrade ? fmt(msg.step1Upgraded, latestVer) : msg.step1Done;
+
+  const s = reportStart(isInteractive, startMsg);
   try {
     await runSilentAsync("npm", ["install", "-g", PKG], { timeout: 120000 });
-    s.stop(needsUpgrade ? fmt(msg.step1Upgraded, latestVer) : msg.step1Done);
-  } catch (_) {
-    s.stop(fmt(msg.step1Fail, PKG));
+    reportStop(isInteractive, s, doneMsg);
+  } catch (err) {
+    reportFail(isInteractive, s, fmt(msg.step1Fail, PKG), err);
     process.exit(1);
   }
 }
@@ -185,18 +198,17 @@ async function skillsAlreadyInstalled() {
   }
 }
 
-async function stepInstallSkills(msg) {
-  const s = p.spinner();
-  s.start(msg.step2Spinner);
+async function stepInstallSkills(msg, isInteractive) {
+  const s = reportStart(isInteractive, msg.step2Spinner);
   try {
     if (await skillsAlreadyInstalled()) {
-      s.stop(msg.step2Skip);
+      reportStop(isInteractive, s, msg.step2Skip);
       return;
     }
     await runSilentAsync("npx", ["-y", "skills", "add", SKILLS_REPO, "-y", "-g"], { timeout: 120000 });
-    s.stop(msg.step2Done);
-  } catch (_) {
-    s.stop(fmt(msg.step2Fail, SKILLS_REPO));
+    reportStop(isInteractive, s, msg.step2Done);
+  } catch (err) {
+    reportFail(isInteractive, s, fmt(msg.step2Fail, SKILLS_REPO), err);
     process.exit(1);
   }
 }
@@ -212,13 +224,13 @@ async function main() {
 
   if (isInteractive) {
     p.intro(msg.setup);
-    await stepInstallGlobally(msg);
-    await stepInstallSkills(msg);
+    await stepInstallGlobally(msg, isInteractive);
+    await stepInstallSkills(msg, isInteractive);
     p.outro(msg.done);
   } else {
     console.log(msg.setup);
-    await stepInstallGlobally(msg);
-    await stepInstallSkills(msg);
+    await stepInstallGlobally(msg, isInteractive);
+    await stepInstallSkills(msg, isInteractive);
     console.log(msg.nonTtyHint);
   }
 }

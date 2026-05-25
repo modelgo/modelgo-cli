@@ -125,11 +125,42 @@ function verifyChecksum(archivePath, expectedHash) {
 }
 
 function semverLessThan(a, b) {
-  const pa = a.replace(/-.*$/, "").split(".").map(Number);
-  const pb = b.replace(/-.*$/, "").split(".").map(Number);
+  const split = (v) => {
+    const idx = v.indexOf("-");
+    return idx === -1 ? [v, ""] : [v.slice(0, idx), v.slice(idx + 1)];
+  };
+  const [coreA, preA] = split(a);
+  const [coreB, preB] = split(b);
+  const pa = coreA.split(".").map(Number);
+  const pb = coreB.split(".").map(Number);
   for (let i = 0; i < 3; i++) {
     if ((pa[i] || 0) < (pb[i] || 0)) return true;
     if ((pa[i] || 0) > (pb[i] || 0)) return false;
+  }
+  if (preA === preB) return false;
+  if (preA === "") return false;
+  if (preB === "") return true;
+  const idsA = preA.split(".");
+  const idsB = preB.split(".");
+  const n = Math.max(idsA.length, idsB.length);
+  for (let i = 0; i < n; i++) {
+    const x = idsA[i];
+    const y = idsB[i];
+    if (x === undefined) return true;
+    if (y === undefined) return false;
+    const numX = /^\d+$/.test(x) ? parseInt(x, 10) : null;
+    const numY = /^\d+$/.test(y) ? parseInt(y, 10) : null;
+    if (numX !== null && numY !== null) {
+      if (numX < numY) return true;
+      if (numX > numY) return false;
+    } else if (numX !== null) {
+      return true;
+    } else if (numY !== null) {
+      return false;
+    } else {
+      if (x < y) return true;
+      if (x > y) return false;
+    }
   }
   return false;
 }
