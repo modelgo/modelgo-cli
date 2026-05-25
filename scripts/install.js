@@ -134,7 +134,130 @@ function semverLessThan(a, b) {
   return false;
 }
 
-// Note: download/extract/install() are added in Task 9.
+function getMirrorUrls(env) {
+  const urls = resolveMirrorUrls(env, archiveName, VERSION);
+  for (const u of urls) ALLOWED_HOSTS.add(new URL(u).hostname);
+  return urls;
+}
+
+function download(url, destPath) {
+  assertAllowedHost(url);
+  const args = [
+    "--fail", "--location", "--silent", "--show-error",
+    "--connect-timeout", "10", "--max-time", "120",
+    "--max-redirs", "3",
+    "--output", destPath,
+  ];
+  if (isWindows) args.unshift("--ssl-revoke-best-effort");
+  args.push(url);
+  execFileSync("curl", args, { stdio: ["ignore", "ignore", "pipe"] });
+}
+
+function extractZipWindows(archivePath, destDir) {
+  const psOpts = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"];
+  const psStdio = ["ignore", "inherit", "inherit"];
+  const psEnv = {
+    ...process.env,
+    MODELGO_CLI_ARCHIVE: archivePath,
+    MODELGO_CLI_DEST: destDir,
+  };
+  try {
+    const dotnet =
+      "$ErrorActionPreference='Stop';" +
+      "Add-Type -AssemblyName System.IO.Compression.FileSystem;" +
+      "[System.IO.Compression.ZipFile]::ExtractToDirectory($env:MODELGO_CLI_ARCHIVE,$env:MODELGO_CLI_DEST)";
+    execFileSync("powershell.exe", [...psOpts, dotnet], { stdio: psStdio, env: psEnv });
+  } catch (primaryErr) {
+    try {
+      const cmdlet =
+        "$ErrorActionPreference='Stop';" +
+        "Expand-Archive -LiteralPath $env:MODELGO_CLI_ARCHIVE -DestinationPath $env:MODELGO_CLI_DEST -Force";
+      execFileSync("powershell.exe", [...psOpts, cmdlet], { stdio: psStdio, env: psEnv });
+    } catch (secondErr) {
+      try {
+        execFileSync("tar", ["-xf", archivePath, "-C", destDir], { stdio: psStdio });
+      } catch (fallbackErr) {
+        throw new Error(
+          `Failed to extract ${archivePath}. ` +
+          `.NET ZipFile: ${primaryErr.message}. ` +
+          `Expand-Archive: ${secondErr.message}. ` +
+          `tar: ${fallbackErr.message}`
+        );
+      }
+    }
+  }
+}
+
+function install() {
+  const mirrorUrls = getMirrorUrls(process.env);
+  const downloadUrls = [GITHUB_URL, ...mirrorUrls];
+
+  fs.mkdirSync(binDir, { recursive: true });
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "modelgo-cli-"));
+  const archivePath = path.join(tmpDir, archiveName);
+
+  try {
+    let lastErr;
+    let downloaded = false;
+    for (const url of downloadUrls) {
+      try {
+        download(url, archivePath);
+        downloaded = true;
+        break;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    if (!downloaded) throw lastErr;
+
+    const expectedHash = getExpectedChecksum(archiveName);
+    verifyChecksum(archivePath, expectedHash);
+
+    if (isWindows) {
+      extractZipWindows(archivePath, tmpDir);
+    } else {
+      execFileSync("tar", ["-xzf", archivePath, "-C", tmpDir], { stdio: "ignore" });
+    }
+
+    const binaryName = NAME + (isWindows ? ".exe" : "");
+    const extractedBinary = path.join(tmpDir, binaryName);
+    fs.copyFileSync(extractedBinary, dest);
+    fs.chmodSync(dest, 0o755);
+    console.log(`${NAME} v${VERSION} installed successfully`);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+if (require.main === module) {
+  if (!platform || !arch) {
+    console.error(`Unsupported platform: ${process.platform}-${process.arch}`);
+    process.exit(1);
+  }
+
+  // Skip binary download when triggered as postinstall under `npx <pkg> install`.
+  // The wizard does not need the binary; run.js will be called next, and it
+  // dispatches to install-wizard.js for the "install" arg.
+  const isNpxPostinstall = process.env.npm_command === "exec";
+  if (isNpxPostinstall) {
+    process.exit(0);
+  }
+
+  try {
+    install();
+  } catch (err) {
+    console.error(`Failed to install ${NAME}:`, err.message);
+    console.error(
+      `\nIf you are behind a firewall or in a restricted network, try one of:\n` +
+      `  # 1. Use a proxy:\n` +
+      `  export https_proxy=http://your-proxy:port\n` +
+      `  npm install -g @modelgo/cli\n\n` +
+      `  # 2. Point to a corporate npm mirror that proxies /-/binary/${NAME}/...:\n` +
+      `  npm install -g @modelgo/cli --registry=https://your-corp-mirror/`
+    );
+    process.exit(1);
+  }
+}
 
 module.exports = {
   // exported for testing
