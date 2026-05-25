@@ -24,7 +24,6 @@ const messages = {
     step1Upgraded: "已升级到 v%s",
     step1Fail:     "全局安装失败。运行以下命令重试: npm install -g %s",
     step2Spinner:  "正在安装 Skills...",
-    step2Skip:     "Skills 已安装，跳过",
     step2Done:     "Skills 已安装",
     step2Fail:     "Skills 安装失败。运行以下命令重试: npx skills add %s -y -g",
     done:          "安装完成！\n试试跟你的 AI 工具（Claude Code、Codex 等）说：\"用 modelgo-cli 跟我打个招呼\"",
@@ -40,7 +39,6 @@ const messages = {
     step1Upgraded: "Upgraded to v%s",
     step1Fail:     "Failed to install globally. Run manually: npm install -g %s",
     step2Spinner:  "Installing skills...",
-    step2Skip:     "Skills already installed. Skipped",
     step2Done:     "Skills installed",
     step2Fail:     "Failed to install skills. Run manually: npx skills add %s -y -g",
     done:          "You are all set!\nTry asking your AI tool (Claude Code, Codex, etc.): \"Have modelgo-cli say hello to me\"",
@@ -189,22 +187,14 @@ async function stepInstallGlobally(msg, isInteractive) {
   }
 }
 
-async function skillsAlreadyInstalled() {
-  try {
-    const out = await runSilentAsync("npx", ["-y", "skills", "ls", "-g"], { timeout: 120000 });
-    return /(^|\s)modelgo-/m.test(out.toString());
-  } catch (_) {
-    return false;
-  }
-}
-
 async function stepInstallSkills(msg, isInteractive) {
+  // Always re-run `skills add` so new skills added in newer modelgo-cli
+  // versions actually land on the user's machine. The skills CLI is
+  // idempotent for existing skills (re-copies content) and additive for
+  // new ones; the slight extra GitHub fetch is worth keeping skill
+  // distribution in sync with the latest published bundle.
   const s = reportStart(isInteractive, msg.step2Spinner);
   try {
-    if (await skillsAlreadyInstalled()) {
-      reportStop(isInteractive, s, msg.step2Skip);
-      return;
-    }
     await runSilentAsync("npx", ["-y", "skills", "add", SKILLS_REPO, "-y", "-g"], { timeout: 120000 });
     reportStop(isInteractive, s, msg.step2Done);
   } catch (err) {
