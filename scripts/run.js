@@ -22,7 +22,7 @@ if (args[0] === "install") {
   if (!fs.existsSync(binPath)) {
     console.error(
       `modelgo-cli binary not found at ${binPath}\n` +
-      `Please reinstall: npm install -g @modelgo/cli`
+      `Please reinstall: npm install -g @model-go/cli`
     );
     process.exit(1);
   }

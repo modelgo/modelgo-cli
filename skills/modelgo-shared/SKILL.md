@@ -17,7 +17,7 @@ This skill is the shared helper for using `modelgo-cli`. Other `modelgo-*` skill
 Run the official install command. It is idempotent — running it again upgrades to the latest version.
 
 ```bash
-npx @modelgo/cli@latest install
+npx @model-go/cli@latest install
 ```
 
 Verify install:
@@ -37,5 +37,5 @@ Business commands (auth, API key management, usage queries, etc.) are not implem
 ## Troubleshooting
 
 - **Command not found after install** — open a new terminal so the updated `PATH` from the npm global bin takes effect. Or run `npm bin -g` to find the install location and add it to `PATH`.
-- **Network error during install** — set `https_proxy` if behind a firewall, or use a corporate npm mirror: `npm install -g @modelgo/cli --registry=https://your-mirror/`.
+- **Network error during install** — set `https_proxy` if behind a firewall, or use a corporate npm mirror: `npm install -g @model-go/cli --registry=https://your-mirror/`.
 - **`[SECURITY] Checksum mismatch`** — the downloaded binary did not match the expected SHA-256. Do not run it. Report the issue.

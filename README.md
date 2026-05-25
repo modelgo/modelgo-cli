@@ -7,15 +7,13 @@ The official CLI for modelgo. Pairs with AI agent skills (Claude Code, Codex, Ge
 ## Install
 
 ```bash
-npx @modelgo/cli@latest install
+npx @model-go/cli@latest install
 ```
-
-> **Pre-release / internal testing**: `@modelgo/cli` is currently published to GitHub Packages, not public npm. Internal testers need a one-time `.npmrc` setup — see [docs/INTERNAL_TESTING.md](./docs/INTERNAL_TESTING.md).
 
 This runs an interactive wizard that:
 
-1. Installs `@modelgo/cli` globally via npm (which downloads the Go binary from GitHub Releases).
-2. Distributes `modelgo-*` skills to every AI agent installed on your machine (Claude Code, Codex, Gemini CLI, Cursor, and 50+ others — via the `skills` ecosystem).
+1. Installs `@model-go/cli` globally via npm (which downloads the Go binary from GitHub Releases).
+2. Distributes `modelgo-*` skills to every AI agent installed on your machine (Claude Code, Trae, Trae CN, and other agents in the [skills](https://www.npmjs.com/package/skills) ecosystem).
 
 After install, restart your AI agent (open a new chat / session) and try:
 
@@ -36,7 +34,7 @@ modelgo-cli --help
 Re-run the installer; it detects an out-of-date install and upgrades in place:
 
 ```bash
-npx @modelgo/cli@latest install
+npx @model-go/cli@latest install
 ```
 
 ## License

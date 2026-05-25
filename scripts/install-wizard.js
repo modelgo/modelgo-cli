@@ -6,7 +6,7 @@ const { execFileSync, execFile } = require("child_process");
 const p = require("@clack/prompts");
 const { semverLessThan } = require("./install.js");
 
-const PKG = "@modelgo/cli";
+const PKG = "@model-go/cli";
 const SKILLS_REPO = "modelgo/modelgo-cli";
 const isWindows = process.platform === "win32";
 

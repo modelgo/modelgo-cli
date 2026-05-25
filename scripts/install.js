@@ -282,9 +282,9 @@ if (require.main === module) {
       `\nIf you are behind a firewall or in a restricted network, try one of:\n` +
       `  # 1. Use a proxy:\n` +
       `  export https_proxy=http://your-proxy:port\n` +
-      `  npm install -g @modelgo/cli\n\n` +
+      `  npm install -g @model-go/cli\n\n` +
       `  # 2. Point to a corporate npm mirror that proxies /-/binary/${NAME}/...:\n` +
-      `  npm install -g @modelgo/cli --registry=https://your-corp-mirror/`
+      `  npm install -g @model-go/cli --registry=https://your-corp-mirror/`
     );
     process.exit(1);
   }
