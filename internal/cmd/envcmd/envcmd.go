@@ -15,34 +15,47 @@ import (
 	"github.com/modelgo/modelgo-cli/internal/env"
 )
 
-// splitFlagsAndPositionals partitions args into a flags-first slice and a
-// positional tail so callers can keep using the std library `flag` package
-// (which stops parsing at the first non-flag token) while still allowing
-// `modelgo env use intl --config /path` style usage where positional args and
-// flags are intermixed.
+// splitFlagsAndPositionals partitions args into a flag-shaped list (passed
+// to fs.Parse) and a list of positional arguments. Without this, Go's
+// stdlib flag.Parse would stop at the first non-flag token, preventing
+// commands like `env use intl --config /path`.
 //
-// Handles:
-//   - "--name=value" / "-n=value" (self-contained)
-//   - "--name value" / "-n value"  (next token consumed unless name ∈ boolFlags)
-//   - "--"                         (everything after is positional)
-func splitFlagsAndPositionals(args []string, boolFlags map[string]bool) (flagArgs, positional []string) {
+// Bool flags are auto-detected from fs so each subcommand doesn't need to
+// keep a separate list in sync.
+//
+// Limitation: when a string flag's value happens to start with '-' (e.g.
+// `--base-url --foo`), the helper still hands the next token off as the
+// value. The stdlib flag package then accepts it. Callers relying on
+// strict flag-value validation should validate the parsed string after
+// fs.Parse returns.
+func splitFlagsAndPositionals(args []string, fs *flag.FlagSet) (positional, flagArgs []string) {
+	boolFlags := map[string]bool{}
+	fs.VisitAll(func(f *flag.Flag) {
+		if bf, ok := f.Value.(interface{ IsBoolFlag() bool }); ok && bf.IsBoolFlag() {
+			boolFlags[f.Name] = true
+		}
+	})
+
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if a == "--" {
+			// Everything after -- is positional.
 			positional = append(positional, args[i+1:]...)
-			return
+			return positional, flagArgs
 		}
 		if strings.HasPrefix(a, "-") && a != "-" {
 			flagArgs = append(flagArgs, a)
-			// `--name=value` is self-contained; otherwise non-bool flag consumes
-			// the next token.
-			if strings.Contains(a, "=") {
-				continue
-			}
+			// Determine flag name (handles both --name and --name=value).
 			name := strings.TrimLeft(a, "-")
-			if boolFlags[name] {
+			if eq := strings.IndexByte(name, '='); eq >= 0 {
+				// --name=value: value is inline, no lookahead needed.
 				continue
 			}
+			if boolFlags[name] {
+				// Bool flag: no value to consume.
+				continue
+			}
+			// Non-bool flag: consume the next token as its value.
 			if i+1 < len(args) {
 				flagArgs = append(flagArgs, args[i+1])
 				i++
@@ -51,7 +64,7 @@ func splitFlagsAndPositionals(args []string, boolFlags map[string]bool) (flagArg
 		}
 		positional = append(positional, a)
 	}
-	return
+	return positional, flagArgs
 }
 
 // Run dispatches an `env` subcommand. args is the list of arguments AFTER
@@ -87,7 +100,7 @@ func runList(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	configPath := fs.String("config", "", "config file path (default ~/.modelgo/config.json)")
 	jsonOut := fs.Bool("json", false, "write structured JSON output")
-	flagArgs, positional := splitFlagsAndPositionals(args, map[string]bool{"json": true})
+	positional, flagArgs := splitFlagsAndPositionals(args, fs)
 	if err := fs.Parse(flagArgs); err != nil {
 		return 2
 	}
@@ -141,7 +154,7 @@ func runCurrent(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("env current", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	configPath := fs.String("config", "", "config file path")
-	flagArgs, positional := splitFlagsAndPositionals(args, nil)
+	positional, flagArgs := splitFlagsAndPositionals(args, fs)
 	if err := fs.Parse(flagArgs); err != nil {
 		return 2
 	}
@@ -162,7 +175,7 @@ func runUse(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("env use", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	configPath := fs.String("config", "", "config file path")
-	flagArgs, positional := splitFlagsAndPositionals(args, nil)
+	positional, flagArgs := splitFlagsAndPositionals(args, fs)
 	if err := fs.Parse(flagArgs); err != nil {
 		return 2
 	}
@@ -195,7 +208,7 @@ func runAdd(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	configPath := fs.String("config", "", "config file path")
 	baseURL := fs.String("base-url", "", "API base URL for this env (required)")
-	flagArgs, positional := splitFlagsAndPositionals(args, nil)
+	positional, flagArgs := splitFlagsAndPositionals(args, fs)
 	if err := fs.Parse(flagArgs); err != nil {
 		return 2
 	}
@@ -243,7 +256,7 @@ func runRemove(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("env remove", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	configPath := fs.String("config", "", "config file path")
-	flagArgs, positional := splitFlagsAndPositionals(args, nil)
+	positional, flagArgs := splitFlagsAndPositionals(args, fs)
 	if err := fs.Parse(flagArgs); err != nil {
 		return 2
 	}
