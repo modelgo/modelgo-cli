@@ -25,18 +25,26 @@ Your AI should find the `modelgo-hello` skill and run `modelgo-cli hello`.
 
 ```bash
 modelgo-cli --version
-modelgo-cli auth login --base-url https://permissions.example.com
+modelgo-cli auth login --base-url https://api.modelgo.com
 modelgo-cli auth status
 modelgo-cli auth logout
 modelgo-cli hello [--name NAME]
 modelgo-cli --help
 ```
 
+`--base-url` points at model-gateway's openapi entrypoint (`/open/v1/*`).
+You can also export it as `MODELGO_API_URL` to avoid passing the flag every
+time:
+
+```bash
+export MODELGO_API_URL=https://api.modelgo.com
+```
+
 For AI-agent flows that cannot stream intermediate output to the user, use:
 
 ```bash
-modelgo-cli auth login --base-url https://permissions.example.com --no-wait --json
-modelgo-cli auth login --base-url https://permissions.example.com --device-code <DEVICE_CODE>
+modelgo-cli auth login --base-url https://api.modelgo.com --no-wait --json
+modelgo-cli auth login --base-url https://api.modelgo.com --device-code <DEVICE_CODE>
 ```
 
 ## Upgrade

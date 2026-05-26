@@ -18,6 +18,20 @@ const (
 	defaultBaseURL      = "https://api.modelgo.com"
 	defaultPollInterval = 5 * time.Second
 	defaultLoginTimeout = 10 * time.Minute
+
+	// loginPathPrefix is the public login prefix. Login lives outside the
+	// model-gateway openapi surface — modelgo-web-api owns it — but the CLI
+	// hits a single public hostname (api.modelgo.com) that the deployment's
+	// ingress routes by prefix. modelgo-model-gateway never sees these
+	// requests; /open/v1/* is reserved for already-authenticated openapi
+	// calls that carry a Bearer session_token.
+	loginPathPrefix = "/v1"
+
+	// openAPIPathPrefix is the future public prefix for already-authenticated
+	// openapi calls served by model-gateway. Not used by the current command
+	// set; declared here so future CLI commands (account, workspaces,
+	// api-keys …) all share one constant.
+	openAPIPathPrefix = "/open/v1"
 )
 
 type Options struct {
@@ -114,7 +128,7 @@ func Login(ctx context.Context, opts Options) (*LoginResult, error) {
 func requestDeviceAuthorization(ctx context.Context, opts Options) (*authorizeResponse, error) {
 	body := authorizeRequest{ClientName: "modelgo-cli", Scope: normalizeScope(opts.Scope)}
 	var out authorizeResponse
-	if err := postJSON(ctx, opts.HTTPClient, opts.BaseURL+"/v1/auth/device/authorize", body, &out); err != nil {
+	if err := postJSON(ctx, opts.HTTPClient, opts.BaseURL+loginPathPrefix+"/auth/device/authorize", body, &out); err != nil {
 		return nil, fmt.Errorf("device authorize: %w", err)
 	}
 	if out.DeviceCode == "" || out.VerificationURL == "" {
@@ -146,7 +160,7 @@ func pollAndStore(ctx context.Context, opts Options, deviceCode string, expiresI
 		}
 
 		var out tokenResponse
-		pending, err := postToken(ctx, opts.HTTPClient, opts.BaseURL+"/v1/auth/device/token", tokenRequest{DeviceCode: deviceCode}, &out)
+		pending, err := postToken(ctx, opts.HTTPClient, opts.BaseURL+loginPathPrefix+"/auth/device/token", tokenRequest{DeviceCode: deviceCode}, &out)
 		if err != nil {
 			return nil, err
 		}
@@ -299,7 +313,7 @@ func DefaultCredentialPath() string {
 func normalizeOptions(opts Options) Options {
 	opts.BaseURL = strings.TrimRight(strings.TrimSpace(opts.BaseURL), "/")
 	if opts.BaseURL == "" {
-		opts.BaseURL = strings.TrimRight(strings.TrimSpace(os.Getenv("MODELGO_PERMISSIONS_URL")), "/")
+		opts.BaseURL = strings.TrimRight(strings.TrimSpace(os.Getenv("MODELGO_API_URL")), "/")
 	}
 	if opts.BaseURL == "" {
 		opts.BaseURL = defaultBaseURL

@@ -78,7 +78,7 @@ func runAuth(args []string, stdout, stderr io.Writer) int {
 func runAuthLogin(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("auth login", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	baseURL := fs.String("base-url", "", "modelgo-permissions base URL")
+	baseURL := fs.String("base-url", "", "modelgo API base URL (model-gateway openapi entrypoint)")
 	store := fs.String("store", "", "credential store path")
 	scope := fs.String("scope", "", "space- or comma-separated scopes to request")
 	noWait := fs.Bool("no-wait", false, "print device authorization URL and return immediately")
