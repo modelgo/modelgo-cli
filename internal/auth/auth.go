@@ -267,16 +267,17 @@ func loadStore(path string) (store, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Try bucketed format first.
+	// Bucketed format unmarshals into store; if that fails, fall back
+	// to the legacy flat format and migrate into a "cn" bucket.
 	var s store
 	if err := json.Unmarshal(data, &s); err == nil {
-		// A flat credential will partially unmarshal into store with
-		// keys like "base_url" → string which would fail; here we got a
-		// clean parse, but it might still be the flat form (e.g. an
-		// empty object) — disambiguate by checking that all values look
-		// like credentials. The presence of a "session_token" key at
-		// top level indicates the flat format.
 		if !looksLikeFlatFormat(data) {
+			for name, cred := range s {
+				if cred.Env == "" {
+					cred.Env = name
+					s[name] = cred
+				}
+			}
 			return s, nil
 		}
 	}
@@ -294,8 +295,15 @@ func looksLikeFlatFormat(data []byte) bool {
 	if err := json.Unmarshal(data, &probe); err != nil {
 		return false
 	}
-	_, hasToken := probe["session_token"]
-	return hasToken
+	raw, ok := probe["session_token"]
+	if !ok {
+		return false
+	}
+	// In the flat format, session_token is a string. In the bucketed
+	// format, an env literally named "session_token" would have a JSON
+	// object as its value — that's not flat.
+	var asString string
+	return json.Unmarshal(raw, &asString) == nil
 }
 
 func SaveCredential(path string, cred Credential) error {
