@@ -3,8 +3,11 @@ package envcmd
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
+	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -230,5 +233,65 @@ func TestEnvDirCleanup(t *testing.T) {
 	// sanity that helper above leaves working tree clean
 	if _, err := os.Stat("/tmp/should-not-exist"); err == nil {
 		t.Fatal("test helper polluted filesystem")
+	}
+}
+
+func TestSplitFlagsAndPositionalsAutoDetectsBoolFlags(t *testing.T) {
+	t.Parallel()
+
+	// Bool flag must not consume the next positional.
+	fs := flag.NewFlagSet("probe", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	_ = fs.Bool("force", false, "")
+	_ = fs.String("config", "", "")
+
+	pos, flagArgs := splitFlagsAndPositionals(
+		[]string{"--force", "intl", "--config", "/tmp/c.json"},
+		fs,
+	)
+	if len(pos) != 1 || pos[0] != "intl" {
+		t.Fatalf("positional = %v, want [intl]", pos)
+	}
+	wantFlagArgs := []string{"--force", "--config", "/tmp/c.json"}
+	if !reflect.DeepEqual(flagArgs, wantFlagArgs) {
+		t.Fatalf("flagArgs = %v, want %v", flagArgs, wantFlagArgs)
+	}
+}
+
+func TestSplitFlagsAndPositionalsHandlesEqualsForm(t *testing.T) {
+	t.Parallel()
+	fs := flag.NewFlagSet("probe", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	_ = fs.String("config", "", "")
+
+	pos, flagArgs := splitFlagsAndPositionals(
+		[]string{"use", "intl", "--config=/tmp/c.json"},
+		fs,
+	)
+	wantPos := []string{"use", "intl"}
+	wantFlagArgs := []string{"--config=/tmp/c.json"}
+	if !reflect.DeepEqual(pos, wantPos) {
+		t.Fatalf("positional = %v, want %v", pos, wantPos)
+	}
+	if !reflect.DeepEqual(flagArgs, wantFlagArgs) {
+		t.Fatalf("flagArgs = %v, want %v", flagArgs, wantFlagArgs)
+	}
+}
+
+func TestSplitFlagsAndPositionalsRespectsDoubleDash(t *testing.T) {
+	t.Parallel()
+	fs := flag.NewFlagSet("probe", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	pos, flagArgs := splitFlagsAndPositionals(
+		[]string{"--", "--config", "intl"},
+		fs,
+	)
+	wantPos := []string{"--config", "intl"}
+	if !reflect.DeepEqual(pos, wantPos) {
+		t.Fatalf("positional = %v, want %v", pos, wantPos)
+	}
+	if len(flagArgs) != 0 {
+		t.Fatalf("flagArgs = %v, want empty", flagArgs)
 	}
 }
