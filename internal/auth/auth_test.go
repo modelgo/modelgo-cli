@@ -240,3 +240,57 @@ func TestDefaultCredentialPathUsesModelGoHomeDir(t *testing.T) {
 		t.Fatalf("DefaultCredentialPath() = %q, want %q", got, want)
 	}
 }
+
+func TestLoadCredentialBackfillsEnvFromBucketKey(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "auth.json")
+	// Hand-written file missing inner "env" field for a bucket.
+	raw := []byte(`{
+  "cn": {
+    "session_token": "sid-cn",
+    "account_id": "acc"
+  }
+}`)
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cred, err := LoadCredential("cn", path)
+	if err != nil {
+		t.Fatalf("LoadCredential: %v", err)
+	}
+	if cred.Env != "cn" {
+		t.Fatalf("Env = %q, want cn (backfilled from bucket key)", cred.Env)
+	}
+}
+
+func TestLoadCredentialAllowsEnvNamedSessionToken(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "auth.json")
+	// Bucketed file where the env name happens to be "session_token".
+	// The flat-format detector must NOT misclassify this.
+	if err := SaveCredential(path, Credential{
+		Env:          "session_token",
+		SessionToken: "sid-1",
+		AccountID:    "acc",
+	}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	cred, err := LoadCredential("session_token", path)
+	if err != nil {
+		t.Fatalf("LoadCredential: %v", err)
+	}
+	if cred.SessionToken != "sid-1" || cred.Env != "session_token" {
+		t.Fatalf("cred = %+v", cred)
+	}
+}
+
+func TestLoadStoreOnEmptyObjectReturnsEmptyStore(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "auth.json")
+	if err := os.WriteFile(path, []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := LoadCredential("cn", path); !os.IsNotExist(err) {
+		t.Fatalf("LoadCredential(cn) on {} = %v, want IsNotExist", err)
+	}
+}
