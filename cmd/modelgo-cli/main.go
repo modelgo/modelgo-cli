@@ -1,4 +1,4 @@
-// Command modelgo-cli is the modelgo CLI entrypoint.
+// Command modelgo is the modelgo CLI entrypoint.
 package main
 
 import (
@@ -11,6 +11,9 @@ import (
 	"time"
 
 	cliauth "github.com/modelgo/modelgo-cli/internal/auth"
+	"github.com/modelgo/modelgo-cli/internal/cmd/envcmd"
+	"github.com/modelgo/modelgo-cli/internal/config"
+	"github.com/modelgo/modelgo-cli/internal/env"
 	"github.com/modelgo/modelgo-cli/internal/hello"
 	"github.com/modelgo/modelgo-cli/internal/version"
 )
@@ -34,6 +37,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runHello(args[1:], stdout, stderr)
 	case "auth":
 		return runAuth(args[1:], stdout, stderr)
+	case "env":
+		return envcmd.Run(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage(stderr)
@@ -75,11 +80,32 @@ func runAuth(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
+// resolveEnvAndURL loads the config file at configPath, picks the active env
+// (respecting an explicit --env flag), and resolves it to a base URL.
+func resolveEnvAndURL(envFlag, configPath string, stderr io.Writer) (envName, baseURL string, ok bool) {
+	if configPath == "" {
+		configPath = config.DefaultPath()
+	}
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load config: %v\n", err)
+		return "", "", false
+	}
+	envName = env.ActiveEnv(envFlag, cfg)
+	url, err := env.Resolve(envName, cfg)
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return "", "", false
+	}
+	return envName, url, true
+}
+
 func runAuthLogin(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("auth login", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	baseURL := fs.String("base-url", "", "modelgo API base URL (model-gateway openapi entrypoint)")
-	store := fs.String("store", "", "credential store path")
+	envFlag := fs.String("env", "", "env to log into (default: active env from config)")
+	configPath := fs.String("config", "", "config file path (default ~/.modelgo/config.json)")
+	store := fs.String("store", "", "credential store path (default ~/.modelgo/auth.json)")
 	scope := fs.String("scope", "", "space- or comma-separated scopes to request")
 	noWait := fs.Bool("no-wait", false, "print device authorization URL and return immediately")
 	deviceCode := fs.String("device-code", "", "poll an existing device code")
@@ -88,10 +114,15 @@ func runAuthLogin(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	envName, baseURL, ok := resolveEnvAndURL(*envFlag, *configPath, stderr)
+	if !ok {
+		return 1
+	}
+
 	ctx := context.Background()
 	loginOpts := cliauth.Options{
-		Env:        "cn",
-		BaseURL:    *baseURL,
+		Env:        envName,
+		BaseURL:    baseURL,
 		Scope:      *scope,
 		DeviceCode: *deviceCode,
 		StorePath:  *store,
@@ -112,14 +143,14 @@ func runAuthLogin(args []string, stdout, stderr io.Writer) int {
 			return 0
 		}
 	} else if !result.Authenticated {
-		fmt.Fprintf(stdout, "Open this URL to authorize modelgo-cli:\n%s\n\nUser code: %s\n", result.VerificationURL, result.UserCode)
+		fmt.Fprintf(stdout, "Open this URL to authorize modelgo:\n%s\n\nUser code: %s\n", result.VerificationURL, result.UserCode)
 		if *noWait {
-			fmt.Fprintf(stdout, "\nAfter approving, run:\nmodelgo-cli auth login --device-code %s\n", result.DeviceCode)
+			fmt.Fprintf(stdout, "\nAfter approving, run:\nmodelgo auth login --device-code %s\n", result.DeviceCode)
 		}
 	}
 	if *noWait || result.Authenticated {
 		if result.Authenticated && !*jsonOut {
-			fmt.Fprintf(stdout, "Logged in as %s\n", result.AccountID)
+			fmt.Fprintf(stdout, "Logged in as %s (env %s)\n", result.AccountID, result.Env)
 		}
 		return 0
 	}
@@ -127,8 +158,8 @@ func runAuthLogin(args []string, stdout, stderr io.Writer) int {
 	if *deviceCode == "" {
 		fmt.Fprintln(stderr, "Waiting for authorization...")
 		result, err = cliauth.Login(ctx, cliauth.Options{
-			Env:        "cn",
-			BaseURL:    *baseURL,
+			Env:        envName,
+			BaseURL:    baseURL,
 			DeviceCode: result.DeviceCode,
 			StorePath:  *store,
 		})
@@ -142,7 +173,7 @@ func runAuthLogin(args []string, stdout, stderr io.Writer) int {
 		enc.SetEscapeHTML(false)
 		_ = enc.Encode(loginJSON(result, false))
 	} else {
-		fmt.Fprintf(stdout, "\nLogged in as %s\n", result.AccountID)
+		fmt.Fprintf(stdout, "\nLogged in as %s (env %s)\n", result.AccountID, result.Env)
 	}
 	return 0
 }
@@ -151,12 +182,14 @@ func loginJSON(result *cliauth.LoginResult, noWait bool) map[string]any {
 	if result.Authenticated {
 		return map[string]any{
 			"authenticated": true,
+			"env":           result.Env,
 			"account_id":    result.AccountID,
 			"tenant_id":     result.TenantID,
 			"expires_at":    result.ExpiresAt.Format(time.RFC3339Nano),
 		}
 	}
 	out := map[string]any{
+		"env":              result.Env,
 		"verification_url": result.VerificationURL,
 		"device_code":      result.DeviceCode,
 		"user_code":        result.UserCode,
@@ -164,7 +197,7 @@ func loginJSON(result *cliauth.LoginResult, noWait bool) map[string]any {
 		"interval":         result.Interval,
 	}
 	if noWait {
-		out["hint"] = fmt.Sprintf("Show verification_url to the user exactly as returned. After approval, run: modelgo-cli auth login --device-code %s", result.DeviceCode)
+		out["hint"] = fmt.Sprintf("Show verification_url to the user exactly as returned. After approval, run: modelgo auth login --device-code %s", result.DeviceCode)
 	}
 	return out
 }
@@ -172,12 +205,23 @@ func loginJSON(result *cliauth.LoginResult, noWait bool) map[string]any {
 func runAuthStatus(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("auth status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	envFlag := fs.String("env", "", "env to check (default: active env from config)")
+	configPath := fs.String("config", "", "config file path")
 	store := fs.String("store", "", "credential store path")
 	jsonOut := fs.Bool("json", false, "write structured JSON output")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	ok, cred, err := cliauth.Status("cn", *store)
+
+	envName := *envFlag
+	if envName == "" {
+		// Without --env or config, default to "cn"; we don't error if config
+		// missing because status should work for first-run "not logged in" UX.
+		cfg, _ := config.Load(configPathOrDefault(*configPath))
+		envName = env.ActiveEnv("", cfg)
+	}
+
+	ok, cred, err := cliauth.Status(envName, *store)
 	if err != nil {
 		fmt.Fprintf(stderr, "auth status failed: %v\n", err)
 		return 1
@@ -186,14 +230,20 @@ func runAuthStatus(args []string, stdout, stderr io.Writer) int {
 		enc := json.NewEncoder(stdout)
 		enc.SetEscapeHTML(false)
 		if !ok {
-			_ = enc.Encode(map[string]any{"logged_in": false})
+			_ = enc.Encode(map[string]any{"logged_in": false, "env": envName})
 		} else {
-			_ = enc.Encode(map[string]any{"logged_in": true, "account_id": cred.AccountID, "tenant_id": cred.TenantID, "expires_at": cred.ExpiresAt.Format(time.RFC3339Nano)})
+			_ = enc.Encode(map[string]any{
+				"logged_in":  true,
+				"env":        envName,
+				"account_id": cred.AccountID,
+				"tenant_id":  cred.TenantID,
+				"expires_at": cred.ExpiresAt.Format(time.RFC3339Nano),
+			})
 		}
 	} else if ok {
-		fmt.Fprintf(stdout, "Logged in as %s\n", cred.AccountID)
+		fmt.Fprintf(stdout, "Logged in as %s (env %s)\n", cred.AccountID, envName)
 	} else {
-		fmt.Fprintln(stdout, "Not logged in")
+		fmt.Fprintf(stdout, "Not logged in (env %s)\n", envName)
 	}
 	if !ok {
 		return 1
@@ -204,41 +254,76 @@ func runAuthStatus(args []string, stdout, stderr io.Writer) int {
 func runAuthLogout(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("auth logout", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	envFlag := fs.String("env", "", "env to log out of (default: active env from config)")
+	configPath := fs.String("config", "", "config file path")
 	store := fs.String("store", "", "credential store path")
+	all := fs.Bool("all", false, "log out of all envs")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if err := cliauth.Logout("cn", *store); err != nil {
+	if *all {
+		if err := cliauth.LogoutAll(*store); err != nil {
+			fmt.Fprintf(stderr, "auth logout failed: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "Logged out of all envs")
+		return 0
+	}
+
+	envName := *envFlag
+	if envName == "" {
+		cfg, _ := config.Load(configPathOrDefault(*configPath))
+		envName = env.ActiveEnv("", cfg)
+	}
+	if err := cliauth.Logout(envName, *store); err != nil {
 		fmt.Fprintf(stderr, "auth logout failed: %v\n", err)
 		return 1
 	}
-	fmt.Fprintln(stdout, "Logged out")
+	fmt.Fprintf(stdout, "Logged out of env %s\n", envName)
 	return 0
 }
 
+func configPathOrDefault(p string) string {
+	if p == "" {
+		return config.DefaultPath()
+	}
+	return p
+}
+
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, `modelgo-cli — the official modelgo CLI
+	fmt.Fprintln(w, `modelgo — the official modelgo CLI
 
 USAGE:
-    modelgo-cli <command> [flags]
+    modelgo <command> [flags]
 
 COMMANDS:
     auth login            Log in with device authorization
     auth status           Show local auth status
     auth logout           Clear local auth credentials
+    env list              List built-in and custom envs
+    env current           Print the active env
+    env use <name>        Switch the active env
+    env add <name>        Register or override an env URL
+    env remove <name>     Remove a custom env or override
     hello [--name NAME]   Print a greeting
     --version, -v         Print the version
     --help, -h            Show this help`)
 }
 
 func printAuthUsage(w io.Writer) {
-	fmt.Fprintln(w, `modelgo-cli auth — authentication commands
+	fmt.Fprintln(w, `modelgo auth — authentication commands
 
 USAGE:
-    modelgo-cli auth <command> [flags]
+    modelgo auth <command> [flags]
 
 COMMANDS:
-    login                 Log in with device authorization
-    status                Show local auth status
-    logout                Clear local auth credentials`)
+    login    Log in with device authorization
+    status   Show local auth status
+    logout   Clear local auth credentials
+
+FLAGS:
+    --env NAME       Operate on a specific env (default: active env from config)
+    --config PATH    Config file path (default ~/.modelgo/config.json)
+    --store PATH     Credential store path (default ~/.modelgo/auth.json)
+    --all            (logout) Clear all envs`)
 }

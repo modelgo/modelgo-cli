@@ -8,7 +8,24 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/modelgo/modelgo-cli/internal/config"
 )
+
+// writeTestEnvConfig pre-populates ~/.modelgo/config.json with a custom env
+// named "test" pointing at the httptest server, and sets it active.
+func writeTestEnvConfig(t *testing.T, dir, baseURL string) string {
+	t.Helper()
+	cfgPath := filepath.Join(dir, "config.json")
+	cfg := config.Config{
+		CurrentEnv: "test",
+		Envs:       map[string]config.EnvEntry{"test": {BaseURL: baseURL}},
+	}
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	return cfgPath
+}
 
 func TestRunAuthLoginNoWaitJSON(t *testing.T) {
 	t.Parallel()
@@ -27,11 +44,15 @@ func TestRunAuthLoginNoWaitJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	dir := t.TempDir()
+	cfgPath := writeTestEnvConfig(t, dir, srv.URL)
+	storePath := filepath.Join(dir, "auth.json")
+
 	var stdout, stderr bytes.Buffer
 	code := run([]string{
 		"auth", "login",
-		"--base-url", srv.URL,
-		"--store", filepath.Join(t.TempDir(), "auth.json"),
+		"--config", cfgPath,
+		"--store", storePath,
 		"--no-wait",
 		"--json",
 	}, &stdout, &stderr)
@@ -47,7 +68,7 @@ func TestRunAuthLoginNoWaitJSON(t *testing.T) {
 	}
 }
 
-func TestRunAuthLoginPrintsURLAndStoresCredential(t *testing.T) {
+func TestRunAuthLoginPrintsURLAndStoresCredentialUnderEnv(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -75,11 +96,15 @@ func TestRunAuthLoginPrintsURLAndStoresCredential(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	dir := t.TempDir()
+	cfgPath := writeTestEnvConfig(t, dir, srv.URL)
+	storePath := filepath.Join(dir, "auth.json")
+
 	var stdout, stderr bytes.Buffer
 	code := run([]string{
 		"auth", "login",
-		"--base-url", srv.URL,
-		"--store", filepath.Join(t.TempDir(), "auth.json"),
+		"--config", cfgPath,
+		"--store", storePath,
 	}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stderr=%s", code, stderr.String())
@@ -105,7 +130,7 @@ func TestRunAuthStatusNotLoggedIn(t *testing.T) {
 	}
 }
 
-func TestUsageMentionsAuth(t *testing.T) {
+func TestUsageMentionsAuthAndEnv(t *testing.T) {
 	t.Parallel()
 
 	var stdout, stderr bytes.Buffer
@@ -113,7 +138,30 @@ func TestUsageMentionsAuth(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit=%d stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "auth login") {
-		t.Fatalf("help missing auth login: %s", stdout.String())
+	out := stdout.String()
+	if !strings.Contains(out, "auth login") {
+		t.Fatalf("help missing auth login: %s", out)
+	}
+	if !strings.Contains(out, "env list") {
+		t.Fatalf("help missing env subcommand: %s", out)
+	}
+	// Help text must say "modelgo" not "modelgo-cli".
+	if strings.Contains(out, "modelgo-cli") {
+		t.Fatalf("help still mentions modelgo-cli: %s", out)
+	}
+}
+
+func TestRunEnvList(t *testing.T) {
+	t.Parallel()
+	cfgPath := writeTestEnvConfig(t, t.TempDir(), "https://api-test.modelgo.com")
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"env", "list", "--config", cfgPath}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "cn") || !strings.Contains(out, "intl") || !strings.Contains(out, "test") {
+		t.Fatalf("list output wrong: %s", out)
 	}
 }
