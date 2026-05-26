@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -163,5 +164,41 @@ func TestRunEnvList(t *testing.T) {
 	out := stdout.String()
 	if !strings.Contains(out, "cn") || !strings.Contains(out, "intl") || !strings.Contains(out, "test") {
 		t.Fatalf("list output wrong: %s", out)
+	}
+}
+
+func TestAuthLogoutSurfacesConfigParseError(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(cfgPath, []byte("{this is not valid json"), 0o600); err != nil {
+		t.Fatalf("write malformed config: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"auth", "logout", "--config", cfgPath, "--store", filepath.Join(dir, "auth.json")}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected non-zero exit on malformed config, stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "load config") {
+		t.Fatalf("stderr missing load-config error: %s", stderr.String())
+	}
+}
+
+func TestAuthStatusSurfacesConfigParseError(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(cfgPath, []byte("{this is not valid json"), 0o600); err != nil {
+		t.Fatalf("write malformed config: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"auth", "status", "--config", cfgPath, "--store", filepath.Join(dir, "auth.json")}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected non-zero exit on malformed config, stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "load config") {
+		t.Fatalf("stderr missing load-config error: %s", stderr.String())
 	}
 }

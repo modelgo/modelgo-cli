@@ -215,9 +215,13 @@ func runAuthStatus(args []string, stdout, stderr io.Writer) int {
 
 	envName := *envFlag
 	if envName == "" {
-		// Without --env or config, default to "cn"; we don't error if config
-		// missing because status should work for first-run "not logged in" UX.
-		cfg, _ := config.Load(configPathOrDefault(*configPath))
+		// First-run users have no config file and config.Load returns
+		// (empty, nil) — so this only surfaces real parse errors.
+		cfg, err := config.Load(configPathOrDefault(*configPath))
+		if err != nil {
+			fmt.Fprintf(stderr, "auth status: load config: %v\n", err)
+			return 1
+		}
 		envName = env.ActiveEnv("", cfg)
 	}
 
@@ -272,7 +276,11 @@ func runAuthLogout(args []string, stdout, stderr io.Writer) int {
 
 	envName := *envFlag
 	if envName == "" {
-		cfg, _ := config.Load(configPathOrDefault(*configPath))
+		cfg, err := config.Load(configPathOrDefault(*configPath))
+		if err != nil {
+			fmt.Fprintf(stderr, "auth logout: load config: %v\n", err)
+			return 1
+		}
 		envName = env.ActiveEnv("", cfg)
 	}
 	if err := cliauth.Logout(envName, *store); err != nil {
