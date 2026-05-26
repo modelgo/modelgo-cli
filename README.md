@@ -2,7 +2,7 @@
 
 The official CLI for modelgo. Pairs with AI agent skills (Claude Code, Codex, Gemini CLI, etc.) so AI agents can operate modelgo on your behalf.
 
-> **v0 framework stage.** Business APIs are not wired up yet; the only command is `hello` (a demo to verify the install pipeline).
+> **v0 framework stage.** The demo `hello` command and device-flow `auth` commands are available. API key, usage, and model gateway commands are not wired up yet.
 
 ## Install
 
@@ -25,8 +25,18 @@ Your AI should find the `modelgo-hello` skill and run `modelgo-cli hello`.
 
 ```bash
 modelgo-cli --version
+modelgo-cli auth login --base-url https://permissions.example.com
+modelgo-cli auth status
+modelgo-cli auth logout
 modelgo-cli hello [--name NAME]
 modelgo-cli --help
+```
+
+For AI-agent flows that cannot stream intermediate output to the user, use:
+
+```bash
+modelgo-cli auth login --base-url https://permissions.example.com --no-wait --json
+modelgo-cli auth login --base-url https://permissions.example.com --device-code <DEVICE_CODE>
 ```
 
 ## Upgrade

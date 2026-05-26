@@ -26,13 +26,20 @@ Verify install:
 modelgo-cli --version
 ```
 
-## v0 framework status
+## Commands
 
-modelgo-cli is currently in v0 framework stage. The only business command available is:
+Currently available commands:
 
 - `modelgo-cli hello [--name NAME]` — print a greeting (demo command, used by the `modelgo-hello` skill)
+- `modelgo-cli auth login [--base-url URL] [--scope SCOPE]` — log in with ModelGo device authorization
+- `modelgo-cli auth login --no-wait --json` — get a verification URL and device code without blocking
+- `modelgo-cli auth login --device-code CODE` — resume polling after the user approves the URL from a prior `--no-wait` run
+- `modelgo-cli auth status` — show local login status
+- `modelgo-cli auth logout` — clear local credentials
 
-Business commands (auth, API key management, usage queries, etc.) are not implemented yet. If the user asks for a feature that isn't in `modelgo-cli --help`, tell them it's not available yet and suggest filing an issue at https://github.com/modelgo/modelgo-cli/issues.
+API key management, usage queries, and model gateway commands are not implemented yet. If the user asks for a feature that isn't in `modelgo-cli --help`, tell them it's not available yet and suggest filing an issue at https://github.com/modelgo/modelgo-cli/issues.
+
+For non-streaming agent harnesses, use `modelgo-cli auth login --no-wait --json`, return the `verification_url` to the user exactly as printed, then after the user confirms approval run `modelgo-cli auth login --device-code <device_code>`.
 
 ## Troubleshooting
 
