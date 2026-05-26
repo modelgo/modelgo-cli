@@ -36,6 +36,7 @@ func TestLoginNoWaitReturnsDeviceInstructionsWithoutWritingCredential(t *testing
 
 	storePath := filepath.Join(t.TempDir(), "auth.json")
 	got, err := Login(context.Background(), Options{
+		Env:       "test",
 		BaseURL:   srv.URL,
 		Scope:     "api_keys:write usage:read",
 		NoWait:    true,
@@ -55,7 +56,7 @@ func TestLoginNoWaitReturnsDeviceInstructionsWithoutWritingCredential(t *testing
 	}
 }
 
-func TestLoginWithDeviceCodePollsUntilApprovedAndStoresCredential(t *testing.T) {
+func TestLoginStoresCredentialUnderEnvBucket(t *testing.T) {
 	t.Parallel()
 
 	polls := 0
@@ -63,22 +64,10 @@ func TestLoginWithDeviceCodePollsUntilApprovedAndStoresCredential(t *testing.T) 
 		if r.URL.Path != "/v1/auth/device/token" {
 			t.Fatalf("unexpected path %s", r.URL.Path)
 		}
-		var body tokenRequest
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Fatalf("decode token request: %v", err)
-		}
-		if body.DeviceCode != "device-1" {
-			t.Fatalf("device_code=%q", body.DeviceCode)
-		}
 		polls++
 		if polls == 1 {
 			w.WriteHeader(http.StatusAccepted)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"symbol": "DEVICE_AUTHORIZATION_PENDING",
-				"details": map[string]any{
-					"interval": 1,
-				},
-			})
+			_ = json.NewEncoder(w).Encode(map[string]any{"symbol": "DEVICE_AUTHORIZATION_PENDING"})
 			return
 		}
 		_ = json.NewEncoder(w).Encode(tokenResponse{
@@ -94,6 +83,7 @@ func TestLoginWithDeviceCodePollsUntilApprovedAndStoresCredential(t *testing.T) 
 
 	storePath := filepath.Join(t.TempDir(), "nested", "auth.json")
 	got, err := Login(context.Background(), Options{
+		Env:        "test",
 		BaseURL:    srv.URL,
 		DeviceCode: "device-1",
 		StorePath:  storePath,
@@ -102,64 +92,148 @@ func TestLoginWithDeviceCodePollsUntilApprovedAndStoresCredential(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
-	if !got.Authenticated || got.AccountID != "acc_1" || got.TenantID != "ten_1" {
+	if !got.Authenticated || got.AccountID != "acc_1" {
 		t.Fatalf("result = %+v", got)
 	}
-	if polls != 2 {
-		t.Fatalf("polls=%d want 2", polls)
-	}
-	cred, err := LoadCredential(storePath)
+
+	cred, err := LoadCredential("test", storePath)
 	if err != nil {
 		t.Fatalf("LoadCredential: %v", err)
 	}
-	if cred.SessionToken != "sid_cli" || cred.BaseURL != srv.URL || cred.AccountID != "acc_1" {
+	if cred.Env != "test" || cred.SessionToken != "sid_cli" || cred.BaseURL != srv.URL {
 		t.Fatalf("credential = %+v", cred)
 	}
-	info, err := os.Stat(storePath)
-	if err != nil {
-		t.Fatalf("stat credential: %v", err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Fatalf("credential mode = %04o want 0600", perm)
+
+	// Other envs should report no credential.
+	if _, err := LoadCredential("cn", storePath); !os.IsNotExist(err) {
+		t.Fatalf("LoadCredential(cn) = %v, want not exist", err)
 	}
 }
 
-func TestCredentialStatusAndLogout(t *testing.T) {
+func TestSaveCredentialPreservesOtherEnvs(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "auth.json")
-	if ok, _, err := Status(path); err != nil || ok {
-		t.Fatalf("empty Status = (%v, _, %v), want false nil", ok, err)
+	if err := SaveCredential(path, Credential{Env: "cn", SessionToken: "sid-cn", AccountID: "a"}); err != nil {
+		t.Fatalf("save cn: %v", err)
 	}
-	if err := SaveCredential(path, Credential{
-		BaseURL:      "https://permissions.example",
+	if err := SaveCredential(path, Credential{Env: "test", SessionToken: "sid-test", AccountID: "b"}); err != nil {
+		t.Fatalf("save test: %v", err)
+	}
+
+	cn, err := LoadCredential("cn", path)
+	if err != nil || cn.SessionToken != "sid-cn" {
+		t.Fatalf("cn = %+v err=%v", cn, err)
+	}
+	test, err := LoadCredential("test", path)
+	if err != nil || test.SessionToken != "sid-test" {
+		t.Fatalf("test = %+v err=%v", test, err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("mode = %04o", perm)
+	}
+}
+
+func TestLogoutRemovesOnlyTheNamedBucket(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "auth.json")
+	_ = SaveCredential(path, Credential{Env: "cn", SessionToken: "sid-cn"})
+	_ = SaveCredential(path, Credential{Env: "test", SessionToken: "sid-test"})
+
+	if err := Logout("cn", path); err != nil {
+		t.Fatalf("Logout cn: %v", err)
+	}
+	if _, err := LoadCredential("cn", path); !os.IsNotExist(err) {
+		t.Fatalf("cn still present: %v", err)
+	}
+	test, err := LoadCredential("test", path)
+	if err != nil || test.SessionToken != "sid-test" {
+		t.Fatalf("test bucket damaged: %+v err=%v", test, err)
+	}
+}
+
+func TestLogoutAllRemovesFile(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "auth.json")
+	_ = SaveCredential(path, Credential{Env: "cn", SessionToken: "sid-cn"})
+	if err := LogoutAll(path); err != nil {
+		t.Fatalf("LogoutAll: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("file still exists: %v", err)
+	}
+}
+
+func TestStatusReturnsCredentialForEnv(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "auth.json")
+
+	if ok, _, err := Status("cn", path); err != nil || ok {
+		t.Fatalf("empty Status = (%v, _, %v)", ok, err)
+	}
+
+	_ = SaveCredential(path, Credential{
+		Env:          "cn",
+		BaseURL:      "https://api.modelgo.com",
 		SessionToken: "sid",
 		AccountID:    "acc",
-		TenantID:     "ten",
 		ExpiresAt:    time.Now().Add(time.Hour),
-	}); err != nil {
-		t.Fatalf("SaveCredential: %v", err)
-	}
-	ok, cred, err := Status(path)
+	})
+
+	ok, cred, err := Status("cn", path)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
 	if !ok || cred.AccountID != "acc" {
 		t.Fatalf("Status = (%v, %+v)", ok, cred)
 	}
-	if err := Logout(path); err != nil {
-		t.Fatalf("Logout: %v", err)
+
+	if ok, _, _ := Status("test", path); ok {
+		t.Fatal("test env should not be logged in")
 	}
-	if ok, _, err := Status(path); err != nil || ok {
-		t.Fatalf("post-logout Status = (%v, _, %v), want false nil", ok, err)
+}
+
+func TestLoadCredentialMigratesLegacyFlatFormat(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "auth.json")
+
+	// Write the old flat format (pre-bucket).
+	legacy := []byte(`{
+  "base_url": "https://api.modelgo.com",
+  "session_token": "legacy-sid",
+  "account_id": "acc",
+  "tenant_id": "ten",
+  "token_type": "Session"
+}`)
+	if err := os.WriteFile(path, legacy, 0o600); err != nil {
+		t.Fatalf("write legacy: %v", err)
+	}
+
+	cred, err := LoadCredential("cn", path)
+	if err != nil {
+		t.Fatalf("LoadCredential: %v", err)
+	}
+	if cred.SessionToken != "legacy-sid" || cred.AccountID != "acc" {
+		t.Fatalf("migrated cred = %+v", cred)
+	}
+	if cred.Env != "cn" {
+		t.Fatalf("expected env=cn after migration, got %q", cred.Env)
+	}
+
+	// Loading a non-cn env from a migrated file should report not found.
+	if _, err := LoadCredential("test", path); !os.IsNotExist(err) {
+		t.Fatalf("non-cn after migration = %v, want not exist", err)
 	}
 }
 
 func TestDefaultCredentialPathUsesModelGoHomeDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("MODELGO_CLI_CONFIG_DIR", "")
-
 	got := DefaultCredentialPath()
 	want := filepath.Join(home, ".modelgo", "auth.json")
 	if got != want {

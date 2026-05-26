@@ -90,6 +90,7 @@ func runAuthLogin(args []string, stdout, stderr io.Writer) int {
 
 	ctx := context.Background()
 	loginOpts := cliauth.Options{
+		Env:        "cn",
 		BaseURL:    *baseURL,
 		Scope:      *scope,
 		DeviceCode: *deviceCode,
@@ -126,6 +127,7 @@ func runAuthLogin(args []string, stdout, stderr io.Writer) int {
 	if *deviceCode == "" {
 		fmt.Fprintln(stderr, "Waiting for authorization...")
 		result, err = cliauth.Login(ctx, cliauth.Options{
+			Env:        "cn",
 			BaseURL:    *baseURL,
 			DeviceCode: result.DeviceCode,
 			StorePath:  *store,
@@ -175,7 +177,7 @@ func runAuthStatus(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	ok, cred, err := cliauth.Status(*store)
+	ok, cred, err := cliauth.Status("cn", *store)
 	if err != nil {
 		fmt.Fprintf(stderr, "auth status failed: %v\n", err)
 		return 1
@@ -206,7 +208,7 @@ func runAuthLogout(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if err := cliauth.Logout(*store); err != nil {
+	if err := cliauth.Logout("cn", *store); err != nil {
 		fmt.Fprintf(stderr, "auth logout failed: %v\n", err)
 		return 1
 	}
