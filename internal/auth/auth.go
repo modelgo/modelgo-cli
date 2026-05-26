@@ -1,4 +1,8 @@
-// Package auth implements modelgo-cli device login and local session storage.
+// Package auth implements modelgo-cli device login and per-env credential
+// storage. ~/.modelgo/auth.json holds a JSON object keyed by env name, e.g.
+// { "cn": {...}, "test": {...} }. Each value follows the legacy Credential
+// shape. Old flat-format files (single credential object) are auto-migrated
+// to a single "cn" bucket on first read.
 package auth
 
 import (
@@ -15,27 +19,25 @@ import (
 )
 
 const (
-	defaultBaseURL      = "https://api.modelgo.com"
 	defaultPollInterval = 5 * time.Second
 	defaultLoginTimeout = 10 * time.Minute
 
 	// loginPathPrefix is the public login prefix. Login lives outside the
 	// model-gateway openapi surface — modelgo-web-api owns it — but the CLI
-	// hits a single public hostname (api.modelgo.com) that the deployment's
-	// ingress routes by prefix. modelgo-model-gateway never sees these
-	// requests; /open/v1/* is reserved for already-authenticated openapi
-	// calls that carry a Bearer session_token.
+	// hits a single public hostname (e.g. api.modelgo.com) that the
+	// deployment's ingress routes by prefix. modelgo-model-gateway never
+	// sees these requests; /open/v1/* is reserved for authenticated openapi
+	// calls carrying a Bearer session_token.
 	loginPathPrefix = "/v1"
 
 	// openAPIPathPrefix is the future public prefix for already-authenticated
-	// openapi calls served by model-gateway. Not used by the current command
-	// set; declared here so future CLI commands (account, workspaces,
-	// api-keys …) all share one constant.
+	// openapi calls served by model-gateway.
 	openAPIPathPrefix = "/open/v1"
 )
 
 type Options struct {
-	BaseURL    string
+	Env        string // env name this login belongs to (e.g. "cn", "test")
+	BaseURL    string // resolved API base URL for Env
 	Scope      string
 	NoWait     bool
 	DeviceCode string
@@ -52,12 +54,14 @@ type LoginResult struct {
 	ExpiresIn       int64
 	Interval        int
 	Authenticated   bool
+	Env             string
 	AccountID       string
 	TenantID        string
 	ExpiresAt       time.Time
 }
 
 type Credential struct {
+	Env          string    `json:"env"`
 	BaseURL      string    `json:"base_url"`
 	SessionToken string    `json:"session_token"`
 	AccountID    string    `json:"account_id"`
@@ -95,6 +99,12 @@ type tokenResponse struct {
 
 func Login(ctx context.Context, opts Options) (*LoginResult, error) {
 	opts = normalizeOptions(opts)
+	if opts.Env == "" {
+		return nil, errors.New("auth: Options.Env is required")
+	}
+	if opts.BaseURL == "" {
+		return nil, errors.New("auth: Options.BaseURL is required")
+	}
 	if opts.DeviceCode != "" {
 		return pollAndStore(ctx, opts, opts.DeviceCode, 600, 5)
 	}
@@ -104,6 +114,7 @@ func Login(ctx context.Context, opts Options) (*LoginResult, error) {
 		return nil, err
 	}
 	result := &LoginResult{
+		Env:             opts.Env,
 		DeviceCode:      authResp.DeviceCode,
 		UserCode:        authResp.UserCode,
 		VerificationURL: authResp.VerificationURL,
@@ -167,6 +178,7 @@ func pollAndStore(ctx context.Context, opts Options, deviceCode string, expiresI
 		if !pending {
 			expiresAt := parseExpiresAt(out.SessionExpiresAt, out.ExpiresIn)
 			cred := Credential{
+				Env:          opts.Env,
 				BaseURL:      opts.BaseURL,
 				SessionToken: out.SessionToken,
 				AccountID:    out.AccountID,
@@ -186,6 +198,7 @@ func pollAndStore(ctx context.Context, opts Options, deviceCode string, expiresI
 			}
 			return &LoginResult{
 				Authenticated: true,
+				Env:           cred.Env,
 				AccountID:     cred.AccountID,
 				TenantID:      cred.TenantID,
 				ExpiresAt:     cred.ExpiresAt,
@@ -246,39 +259,92 @@ func postToken(ctx context.Context, client *http.Client, url string, in tokenReq
 	return false, nil
 }
 
+// store is the on-disk shape of ~/.modelgo/auth.json.
+type store map[string]Credential
+
+func loadStore(path string) (store, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	// Try bucketed format first.
+	var s store
+	if err := json.Unmarshal(data, &s); err == nil {
+		// A flat credential will partially unmarshal into store with
+		// keys like "base_url" → string which would fail; here we got a
+		// clean parse, but it might still be the flat form (e.g. an
+		// empty object) — disambiguate by checking that all values look
+		// like credentials. The presence of a "session_token" key at
+		// top level indicates the flat format.
+		if !looksLikeFlatFormat(data) {
+			return s, nil
+		}
+	}
+	// Fall back to legacy flat format.
+	var flat Credential
+	if err := json.Unmarshal(data, &flat); err != nil {
+		return nil, fmt.Errorf("parse credential file: %w", err)
+	}
+	flat.Env = "cn"
+	return store{"cn": flat}, nil
+}
+
+func looksLikeFlatFormat(data []byte) bool {
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return false
+	}
+	_, hasToken := probe["session_token"]
+	return hasToken
+}
+
 func SaveCredential(path string, cred Credential) error {
+	if cred.Env == "" {
+		return errors.New("auth: Credential.Env is required")
+	}
 	if path == "" {
 		path = DefaultCredentialPath()
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(cred, "", "  ")
+	s, err := loadStore(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if s == nil {
+		s = store{}
+	}
+	s[cred.Env] = cred
+	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, append(data, '\n'), 0o600)
 }
 
-func LoadCredential(path string) (*Credential, error) {
+func LoadCredential(envName, path string) (*Credential, error) {
+	if envName == "" {
+		return nil, errors.New("auth: env name is required")
+	}
 	if path == "" {
 		path = DefaultCredentialPath()
 	}
-	data, err := os.ReadFile(path)
+	s, err := loadStore(path)
 	if err != nil {
 		return nil, err
 	}
-	var cred Credential
-	if err := json.Unmarshal(data, &cred); err != nil {
-		return nil, err
+	cred, ok := s[envName]
+	if !ok {
+		return nil, &os.PathError{Op: "load", Path: path + "#" + envName, Err: os.ErrNotExist}
 	}
 	return &cred, nil
 }
 
-func Status(path string) (bool, *Credential, error) {
-	cred, err := LoadCredential(path)
+func Status(envName, path string) (bool, *Credential, error) {
+	cred, err := LoadCredential(envName, path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return false, nil, nil
 		}
 		return false, nil, err
@@ -289,7 +355,38 @@ func Status(path string) (bool, *Credential, error) {
 	return true, cred, nil
 }
 
-func Logout(path string) error {
+func Logout(envName, path string) error {
+	if envName == "" {
+		return errors.New("auth: env name is required")
+	}
+	if path == "" {
+		path = DefaultCredentialPath()
+	}
+	s, err := loadStore(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	if _, ok := s[envName]; !ok {
+		return nil
+	}
+	delete(s, envName)
+	if len(s) == 0 {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	data, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o600)
+}
+
+func LogoutAll(path string) error {
 	if path == "" {
 		path = DefaultCredentialPath()
 	}
@@ -300,9 +397,6 @@ func Logout(path string) error {
 }
 
 func DefaultCredentialPath() string {
-	if dir := strings.TrimSpace(os.Getenv("MODELGO_CLI_CONFIG_DIR")); dir != "" {
-		return filepath.Join(dir, "auth.json")
-	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return filepath.Join(".modelgo", "auth.json")
@@ -311,13 +405,8 @@ func DefaultCredentialPath() string {
 }
 
 func normalizeOptions(opts Options) Options {
+	opts.Env = strings.TrimSpace(opts.Env)
 	opts.BaseURL = strings.TrimRight(strings.TrimSpace(opts.BaseURL), "/")
-	if opts.BaseURL == "" {
-		opts.BaseURL = strings.TrimRight(strings.TrimSpace(os.Getenv("MODELGO_API_URL")), "/")
-	}
-	if opts.BaseURL == "" {
-		opts.BaseURL = defaultBaseURL
-	}
 	if opts.StorePath == "" {
 		opts.StorePath = DefaultCredentialPath()
 	}
