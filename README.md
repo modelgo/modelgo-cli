@@ -12,39 +12,64 @@ npx @model-go/cli@latest install
 
 This runs an interactive wizard that:
 
-1. Installs `@model-go/cli` globally via npm (which downloads the Go binary from GitHub Releases).
+1. Installs `@model-go/cli` globally via npm (which downloads the Go binary from GitHub Releases as `modelgo`).
 2. Distributes `modelgo-*` skills to every AI agent installed on your machine (Claude Code, Trae, Trae CN, and other agents in the [skills](https://www.npmjs.com/package/skills) ecosystem).
 
 After install, restart your AI agent (open a new chat / session) and try:
 
-> "Have modelgo-cli say hello to me."
+> "Have modelgo say hello to me."
 
-Your AI should find the `modelgo-hello` skill and run `modelgo-cli hello`.
+Your AI should find the `modelgo-hello` skill and run `modelgo hello`.
 
 ## Direct commands
 
 ```bash
-modelgo-cli --version
-modelgo-cli auth login --base-url https://api.modelgo.com
-modelgo-cli auth status
-modelgo-cli auth logout
-modelgo-cli hello [--name NAME]
-modelgo-cli --help
+modelgo --version
+modelgo auth login
+modelgo auth status
+modelgo auth logout
+modelgo hello [--name NAME]
+modelgo --help
 ```
 
-`--base-url` points at model-gateway's openapi entrypoint (`/open/v1/*`).
-You can also export it as `MODELGO_API_URL` to avoid passing the flag every
-time:
+### Environments
+
+The CLI talks to a named environment. Two are built in:
+
+| Env    | Base URL                     |
+| ------ | ---------------------------- |
+| `cn`   | `https://api.modelgo.com`    |
+| `intl` | `https://api.modelgo.global` |
+
+The active environment defaults to `cn`. Switch it, or register your own:
 
 ```bash
-export MODELGO_API_URL=https://api.modelgo.com
+modelgo env list                 # show built-in + custom envs (active marked with *)
+modelgo env current              # print the active env
+modelgo env use intl             # switch the active env
+modelgo env add <name> --base-url https://...   # register or override an env URL
+modelgo env remove <name>        # remove a custom env or override
 ```
 
-For AI-agent flows that cannot stream intermediate output to the user, use:
+Environment definitions and the active selection live in `~/.modelgo/config.json`.
+Credentials are stored per-env in `~/.modelgo/auth.json`, so switching environments
+preserves each login. There are no environment variables to set.
+
+Auth commands operate on the active env; pass `--env <name>` to target a different one:
 
 ```bash
-modelgo-cli auth login --base-url https://api.modelgo.com --no-wait --json
-modelgo-cli auth login --base-url https://api.modelgo.com --device-code <DEVICE_CODE>
+modelgo auth login --env intl
+modelgo auth status --env intl
+modelgo auth logout --all          # clear every env
+```
+
+### Non-streaming agent flows
+
+For AI-agent harnesses that cannot stream intermediate output to the user, use:
+
+```bash
+modelgo auth login --no-wait --json
+modelgo auth login --device-code <DEVICE_CODE>
 ```
 
 ## Upgrade
