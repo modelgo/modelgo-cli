@@ -23,38 +23,38 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.join(__dirname, "fixtures");
 
 test("resolveMirrorUrls: default chain when no registry set", () => {
-  const urls = resolveMirrorUrls({}, "modelgo-cli-0.1.0-darwin-arm64.tar.gz", "0.1.0");
+  const urls = resolveMirrorUrls({}, "modelgo-0.1.0-darwin-arm64.tar.gz", "0.1.0");
   assert.deepEqual(urls, [
-    "https://registry.npmmirror.com/-/binary/modelgo-cli/v0.1.0/modelgo-cli-0.1.0-darwin-arm64.tar.gz",
+    "https://registry.npmmirror.com/-/binary/modelgo/v0.1.0/modelgo-0.1.0-darwin-arm64.tar.gz",
   ]);
 });
 
 test("resolveMirrorUrls: custom https registry prepended, default appended", () => {
   const urls = resolveMirrorUrls(
     { npm_config_registry: "https://corp.example.com/npm/" },
-    "modelgo-cli-0.1.0-linux-amd64.tar.gz",
+    "modelgo-0.1.0-linux-amd64.tar.gz",
     "0.1.0"
   );
   assert.deepEqual(urls, [
-    "https://corp.example.com/npm/-/binary/modelgo-cli/v0.1.0/modelgo-cli-0.1.0-linux-amd64.tar.gz",
-    "https://registry.npmmirror.com/-/binary/modelgo-cli/v0.1.0/modelgo-cli-0.1.0-linux-amd64.tar.gz",
+    "https://corp.example.com/npm/-/binary/modelgo/v0.1.0/modelgo-0.1.0-linux-amd64.tar.gz",
+    "https://registry.npmmirror.com/-/binary/modelgo/v0.1.0/modelgo-0.1.0-linux-amd64.tar.gz",
   ]);
 });
 
 test("resolveMirrorUrls: http registry rejected (only default returned)", () => {
   const urls = resolveMirrorUrls(
     { npm_config_registry: "http://insecure.example.com/" },
-    "modelgo-cli-0.1.0-linux-amd64.tar.gz",
+    "modelgo-0.1.0-linux-amd64.tar.gz",
     "0.1.0"
   );
   assert.equal(urls.length, 1);
-  assert.equal(urls[0], "https://registry.npmmirror.com/-/binary/modelgo-cli/v0.1.0/modelgo-cli-0.1.0-linux-amd64.tar.gz");
+  assert.equal(urls[0], "https://registry.npmmirror.com/-/binary/modelgo/v0.1.0/modelgo-0.1.0-linux-amd64.tar.gz");
 });
 
 test("resolveMirrorUrls: default npmjs registry skipped (only default returned)", () => {
   const urls = resolveMirrorUrls(
     { npm_config_registry: "https://registry.npmjs.org/" },
-    "modelgo-cli-0.1.0-linux-amd64.tar.gz",
+    "modelgo-0.1.0-linux-amd64.tar.gz",
     "0.1.0"
   );
   assert.equal(urls.length, 1);
@@ -81,7 +81,7 @@ test("assertAllowedHost: passes for allowed, throws for others", () => {
 });
 
 test("getExpectedChecksum: finds entry in fixtures/checksums.txt", () => {
-  const hash = getExpectedChecksum("modelgo-cli-0.1.0-darwin-arm64.tar.gz", fixturesDir);
+  const hash = getExpectedChecksum("modelgo-0.1.0-darwin-arm64.tar.gz", fixturesDir);
   assert.equal(hash, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 });
 
@@ -94,7 +94,7 @@ test("getExpectedChecksum: throws when archive entry missing", () => {
 
 test("verifyChecksum: passes for matching SHA-256", () => {
   // Write 5 bytes, compute SHA-256 deterministically
-  const tmp = path.join(os.tmpdir(), "modelgo-cli-test-" + Date.now());
+  const tmp = path.join(os.tmpdir(), "modelgo-test-" + Date.now());
   fs.writeFileSync(tmp, "hello");
   // SHA-256 of "hello" = 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
   try {
@@ -107,7 +107,7 @@ test("verifyChecksum: passes for matching SHA-256", () => {
 });
 
 test("verifyChecksum: throws for mismatch", () => {
-  const tmp = path.join(os.tmpdir(), "modelgo-cli-test-" + Date.now());
+  const tmp = path.join(os.tmpdir(), "modelgo-test-" + Date.now());
   fs.writeFileSync(tmp, "hello");
   try {
     assert.throws(

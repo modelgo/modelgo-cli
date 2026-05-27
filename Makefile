@@ -40,8 +40,8 @@ test:
 build:
 	mkdir -p bin
 	go build -ldflags "-X github.com/modelgo/modelgo-cli/internal/version.Version=v0.0.0-dev" \
-		-o bin/modelgo-cli ./cmd/modelgo-cli
-	@echo "Built bin/modelgo-cli — try: ./bin/modelgo-cli hello"
+		-o bin/modelgo ./cmd/modelgo-cli
+	@echo "Built bin/modelgo — try: ./bin/modelgo hello"
 
 clean:
 	rm -rf bin/ dist/ node_modules/

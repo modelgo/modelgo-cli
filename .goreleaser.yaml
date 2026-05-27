@@ -9,7 +9,7 @@ before:
 builds:
   - id: modelgo-cli
     main: ./cmd/modelgo-cli
-    binary: modelgo-cli
+    binary: modelgo
     ldflags:
       - -s -w -X github.com/modelgo/modelgo-cli/internal/version.Version=v{{.Version}}
     env:
@@ -19,7 +19,7 @@ builds:
 
 archives:
   - id: modelgo-cli
-    name_template: 'modelgo-cli-{{.Version}}-{{.Os}}-{{.Arch}}'
+    name_template: 'modelgo-{{.Version}}-{{.Os}}-{{.Arch}}'
     format_overrides:
       - goos: windows
         formats: [zip]

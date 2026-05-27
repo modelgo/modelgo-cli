@@ -12,14 +12,14 @@
 
 ## Manual smoke test (required after every release)
 
-In a clean environment (e.g. fresh Docker container or a machine without modelgo-cli installed):
+In a clean environment (e.g. fresh Docker container or a machine without modelgo installed):
 
 ```bash
 docker run --rm -it node:20 bash
 # inside the container:
 npx @model-go/cli@latest install --lang=en
-which modelgo-cli && modelgo-cli --version       # expect the just-released version
-modelgo-cli hello --name smoketest               # expect "Hello, smoketest!"
+which modelgo && modelgo --version               # expect the just-released version
+modelgo hello --name smoketest                   # expect "Hello, smoketest!"
 ```
 
 On a developer machine that has Claude Code installed:
@@ -29,7 +29,7 @@ ls ~/.claude/skills/modelgo-shared/SKILL.md      # expect file to exist
 ls ~/.claude/skills/modelgo-hello/SKILL.md       # expect file to exist
 ```
 
-Open a new Claude Code session and ask: "Have modelgo-cli say hello to me." Expect the agent to call `modelgo-cli hello` and report the greeting.
+Open a new Claude Code session and ask: "Have modelgo say hello to me." Expect the agent to call `modelgo hello` and report the greeting.
 
 If any step fails, file an issue and yank the release:
 

@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 //
 // npm bin entrypoint. Routes:
-//   - `modelgo-cli install`  → install-wizard.js (interactive setup)
-//   - everything else        → exec bin/modelgo-cli (the downloaded Go binary)
+//   - `modelgo install`  → install-wizard.js (interactive setup)
+//   - everything else    → exec bin/modelgo (the downloaded Go binary)
 
 const { execFileSync } = require("child_process");
 const path = require("path");
@@ -16,12 +16,12 @@ if (args[0] === "install") {
   require("./install-wizard.js");
 } else {
   const isWindows = process.platform === "win32";
-  const binName = "modelgo-cli" + (isWindows ? ".exe" : "");
+  const binName = "modelgo" + (isWindows ? ".exe" : "");
   const binPath = path.join(__dirname, "..", "bin", binName);
 
   if (!fs.existsSync(binPath)) {
     console.error(
-      `modelgo-cli binary not found at ${binPath}\n` +
+      `modelgo binary not found at ${binPath}\n` +
       `Please reinstall: npm install -g @model-go/cli`
     );
     process.exit(1);

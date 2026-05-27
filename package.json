@@ -3,7 +3,7 @@
   "version": "0.1.1",
   "description": "The official CLI for modelgo. Pairs with AI agent skills so AI agents can operate modelgo on your behalf.",
   "bin": {
-    "modelgo-cli": "scripts/run.js"
+    "modelgo": "scripts/run.js"
   },
   "scripts": {
     "postinstall": "node scripts/install.js",

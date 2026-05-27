@@ -9,7 +9,7 @@ const crypto = require("crypto");
 
 const VERSION = require("../package.json").version;
 const REPO = "modelgo/modelgo-cli";
-const NAME = "modelgo-cli";
+const NAME = "modelgo";
 const DEFAULT_MIRROR_HOST = "https://registry.npmmirror.com";
 
 // Allowlist gates the initial request host. curl --location follows redirects
@@ -224,7 +224,7 @@ function install() {
   const downloadUrls = [GITHUB_URL, ...mirrorUrls];
 
   fs.mkdirSync(binDir, { recursive: true });
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "modelgo-cli-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "modelgo-"));
   const archivePath = path.join(tmpDir, archiveName);
 
   try {
