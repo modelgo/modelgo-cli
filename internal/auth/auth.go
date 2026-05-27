@@ -137,7 +137,7 @@ func Login(ctx context.Context, opts Options) (*LoginResult, error) {
 }
 
 func requestDeviceAuthorization(ctx context.Context, opts Options) (*authorizeResponse, error) {
-	body := authorizeRequest{ClientName: "modelgo-cli", Scope: normalizeScope(opts.Scope)}
+	body := authorizeRequest{ClientName: "modelgo", Scope: normalizeScope(opts.Scope)}
 	var out authorizeResponse
 	if err := postJSON(ctx, opts.HTTPClient, opts.BaseURL+loginPathPrefix+"/auth/device/authorize", body, &out); err != nil {
 		return nil, fmt.Errorf("device authorize: %w", err)
@@ -219,7 +219,7 @@ func postJSON(ctx context.Context, client *http.Client, url string, in any, out 
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "modelgo-cli")
+	req.Header.Set("User-Agent", "modelgo")
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -241,7 +241,7 @@ func postToken(ctx context.Context, client *http.Client, url string, in tokenReq
 		return false, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "modelgo-cli")
+	req.Header.Set("User-Agent", "modelgo")
 	resp, err := client.Do(req)
 	if err != nil {
 		return false, err

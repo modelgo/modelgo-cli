@@ -109,7 +109,7 @@ func runAuthLogin(args []string, stdout, stderr io.Writer) int {
 	scope := fs.String("scope", "", "space- or comma-separated scopes to request")
 	noWait := fs.Bool("no-wait", false, "print device authorization URL and return immediately")
 	deviceCode := fs.String("device-code", "", "poll an existing device code")
-	jsonOut := fs.Bool("json", false, "write structured JSON output")
+	jsonOut := fs.Bool("json", false, "write structured JSON output (NDJSON: device-code object, then authenticated object)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

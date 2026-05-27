@@ -14,16 +14,18 @@ import (
 func TestLoginNoWaitReturnsDeviceInstructionsWithoutWritingCredential(t *testing.T) {
 	t.Parallel()
 
-	var sawScope string
+	var sawScope, sawClientName, sawUserAgent string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/auth/device/authorize" {
 			t.Fatalf("unexpected path %s", r.URL.Path)
 		}
+		sawUserAgent = r.Header.Get("User-Agent")
 		var body authorizeRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
 		sawScope = body.Scope
+		sawClientName = body.ClientName
 		_ = json.NewEncoder(w).Encode(authorizeResponse{
 			DeviceCode:      "device-1",
 			UserCode:        "ABCD-EFGH",
@@ -47,6 +49,12 @@ func TestLoginNoWaitReturnsDeviceInstructionsWithoutWritingCredential(t *testing
 	}
 	if sawScope != "api_keys:write usage:read" {
 		t.Fatalf("scope = %q", sawScope)
+	}
+	if sawClientName != "modelgo" {
+		t.Fatalf("client_name = %q, want modelgo", sawClientName)
+	}
+	if sawUserAgent != "modelgo" {
+		t.Fatalf("User-Agent = %q, want modelgo", sawUserAgent)
 	}
 	if got.DeviceCode != "device-1" || got.UserCode != "ABCD-EFGH" || got.VerificationURL == "" {
 		t.Fatalf("result = %+v", got)
