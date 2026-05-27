@@ -72,6 +72,13 @@ modelgo auth login --no-wait --json
 modelgo auth login --device-code <DEVICE_CODE>
 ```
 
+> **`--json` emits newline-delimited JSON (NDJSON).** In the default waiting
+> flow (`modelgo auth login --json` without `--no-wait`), stdout receives two
+> JSON objects: first the device-code object (with `verification_url`), then
+> the authenticated object once approved. Parse line by line — don't
+> `JSON.parse` the whole stream. With `--no-wait`, only the device-code object
+> is printed.
+
 ## Upgrade
 
 Re-run the installer; it detects an out-of-date install and upgrades in place:
