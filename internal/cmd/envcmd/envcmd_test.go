@@ -143,6 +143,40 @@ func TestAddRequiresValidURL(t *testing.T) {
 	}
 }
 
+func TestAddRejectsInvalidEnvName(t *testing.T) {
+	t.Parallel()
+	// Note: names starting with "-" are rejected earlier by flag parsing
+	// (also non-zero exit), so they're not in this validation-message list.
+	for _, name := range []string{"", "  ", "has space", "bad/slash", ".dotstart"} {
+		cfgPath := filepath.Join(t.TempDir(), "config.json")
+		var stdout, stderr bytes.Buffer
+		code := Run([]string{"add", name, "--base-url", "https://api-test.modelgo.com", "--config", cfgPath}, &stdout, &stderr)
+		if code == 0 {
+			t.Fatalf("name %q: expected non-zero exit, stdout=%s", name, stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "invalid env name") {
+			t.Fatalf("name %q: stderr=%q", name, stderr.String())
+		}
+		// Nothing should have been persisted.
+		cfg, _ := config.Load(cfgPath)
+		if len(cfg.Envs) != 0 {
+			t.Fatalf("name %q: persisted bad entry: %+v", name, cfg.Envs)
+		}
+	}
+}
+
+func TestAddAcceptsValidEnvNames(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"test", "staging-2", "dev_box", "v1.2", "A"} {
+		cfgPath := filepath.Join(t.TempDir(), "config.json")
+		var stdout, stderr bytes.Buffer
+		code := Run([]string{"add", name, "--base-url", "https://api-test.modelgo.com", "--config", cfgPath}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("name %q: exit=%d stderr=%s", name, code, stderr.String())
+		}
+	}
+}
+
 func TestRemoveCustomEnv(t *testing.T) {
 	t.Parallel()
 	cfgPath := writeConfig(t, t.TempDir(), config.Config{

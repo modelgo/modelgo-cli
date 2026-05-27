@@ -9,11 +9,23 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/modelgo/modelgo-cli/internal/config"
 	"github.com/modelgo/modelgo-cli/internal/env"
 )
+
+// validEnvName guards env names so config keys stay readable and shell-safe:
+// must start alphanumeric, then letters, digits, '-', '_', or '.'.
+var validEnvName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
+
+func validateEnvName(name string) error {
+	if !validEnvName.MatchString(name) {
+		return fmt.Errorf("invalid env name %q: use letters, digits, '-', '_', '.' (must start alphanumeric)", name)
+	}
+	return nil
+}
 
 // splitFlagsAndPositionals partitions args into a flag-shaped list (passed
 // to fs.Parse) and a list of positional arguments. Without this, Go's
@@ -217,6 +229,10 @@ func runAdd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	name := positional[0]
+	if err := validateEnvName(name); err != nil {
+		fmt.Fprintf(stderr, "env add: %v\n", err)
+		return 2
+	}
 	if *baseURL == "" {
 		fmt.Fprintln(stderr, "env add: --base-url is required")
 		return 2
