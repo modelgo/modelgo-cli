@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -551,6 +552,64 @@ func LogoutAll(path string) error {
 		return err
 	}
 	return nil
+}
+
+// RemoteTenant is one tenant the account belongs to, as returned by the server.
+type RemoteTenant struct {
+	TenantID  string `json:"tenant_id"`
+	Name      string `json:"name"`
+	Slug      string `json:"slug"`
+	Role      string `json:"role"`
+	IsDefault bool   `json:"is_default"`
+}
+
+// FetchTenants lists every tenant the account behind the given credential
+// belongs to, by calling GET {BaseURL}/open/v1/tenants with the credential's
+// session token as a Bearer token. The route is served by model-gateway, which
+// reverse-proxies to web-api/permissions. The response envelope is
+// {"data": [...]}; a bare array is also accepted.
+func FetchTenants(ctx context.Context, client *http.Client, cred *Credential) ([]RemoteTenant, error) {
+	if cred == nil || cred.SessionToken == "" {
+		return nil, errors.New("auth: a logged-in session is required to fetch tenants")
+	}
+	if cred.BaseURL == "" {
+		return nil, errors.New("auth: credential has no base_url")
+	}
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+	url := strings.TrimRight(cred.BaseURL, "/") + openAPIPathPrefix + "/tenants"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+cred.SessionToken)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "modelgo")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("list tenants: HTTP %d", resp.StatusCode)
+	}
+	// Accept either {"data":[...]} or a bare [...].
+	var enveloped struct {
+		Data []RemoteTenant `json:"data"`
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(body, &enveloped); err == nil && enveloped.Data != nil {
+		return enveloped.Data, nil
+	}
+	var bare []RemoteTenant
+	if err := json.Unmarshal(body, &bare); err != nil {
+		return nil, fmt.Errorf("list tenants: decode response: %w", err)
+	}
+	return bare, nil
 }
 
 func DefaultCredentialPath() string {
