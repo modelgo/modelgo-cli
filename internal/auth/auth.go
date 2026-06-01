@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -411,6 +412,9 @@ func ListTenants(envName, path string) ([]Credential, string, error) {
 	for _, c := range b.Tenants {
 		out = append(out, c)
 	}
+	// Stable ordering by tenant id so output is deterministic (matching the
+	// --remote path).
+	sort.Slice(out, func(i, j int) bool { return out[i].TenantID < out[j].TenantID })
 	return out, b.ActiveTenantID, nil
 }
 
@@ -520,15 +524,34 @@ func Logout(envName, tenantID, path string) error {
 	if tenantID == "" { // clear the whole env
 		delete(s, envName)
 	} else {
+		prevTenantID := b.PreviousTenantID // capture before mutating
 		delete(b.Tenants, tenantID)
+		// Drop a dangling previous pointer (to the just-removed tenant).
 		if b.PreviousTenantID == tenantID {
 			b.PreviousTenantID = ""
+			prevTenantID = ""
 		}
 		if b.ActiveTenantID == tenantID {
+			// Deterministic fallback: prefer the prior previous tenant if it
+			// still exists, otherwise the lexicographically smallest remaining
+			// tenant id, otherwise empty when nothing remains.
 			b.ActiveTenantID = ""
-			for id := range b.Tenants { // fall back to any remaining tenant
-				b.ActiveTenantID = id
-				break
+			if prevTenantID != "" {
+				if _, ok := b.Tenants[prevTenantID]; ok {
+					b.ActiveTenantID = prevTenantID
+				}
+			}
+			if b.ActiveTenantID == "" && len(b.Tenants) > 0 {
+				ids := make([]string, 0, len(b.Tenants))
+				for id := range b.Tenants {
+					ids = append(ids, id)
+				}
+				sort.Strings(ids)
+				b.ActiveTenantID = ids[0]
+			}
+			// The new active tenant must not also be the previous pointer.
+			if b.PreviousTenantID == b.ActiveTenantID {
+				b.PreviousTenantID = ""
 			}
 		}
 		if len(b.Tenants) == 0 {

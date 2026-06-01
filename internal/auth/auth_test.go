@@ -296,6 +296,110 @@ func TestLogoutRemovesOnlyTheNamedTenant(t *testing.T) {
 	}
 }
 
+// TestLogoutActiveTenantFallbackIsDeterministic verifies the deterministic
+// fallback rule when the active tenant is logged out:
+//
+//  1. prefer the prior PreviousTenantID if it still exists, else
+//  2. the lexicographically smallest remaining tenant id (sort.Strings min),
+//     else empty when nothing remains.
+//
+// Login order ten_1, ten_2, ten_3 leaves active=ten_3, previous=ten_2.
+func TestLogoutActiveTenantFallbackIsDeterministic(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "auth.json")
+	_ = SaveCredential(path, Credential{Env: "cn", SessionToken: "s1", TenantID: "ten_1"})
+	_ = SaveCredential(path, Credential{Env: "cn", SessionToken: "s2", TenantID: "ten_2"})
+	_ = SaveCredential(path, Credential{Env: "cn", SessionToken: "s3", TenantID: "ten_3"})
+
+	// active=ten_3, previous=ten_2 -> logging out ten_3 falls back to previous.
+	active, _ := LoadActive("cn", path)
+	if active.TenantID != "ten_3" {
+		t.Fatalf("precondition active = %q, want ten_3", active.TenantID)
+	}
+	if err := Logout("cn", "ten_3", path); err != nil {
+		t.Fatalf("Logout ten_3: %v", err)
+	}
+	active, err := LoadActive("cn", path)
+	if err != nil || active.TenantID != "ten_2" {
+		t.Fatalf("after logout ten_3, active = %+v err=%v, want ten_2 (previous)", active, err)
+	}
+
+	// Now active=ten_2, previous was cleared (it equaled the new active).
+	// Logging out ten_2 has no usable previous, so it falls back to the
+	// lexicographically smallest remaining id: ten_1.
+	if err := Logout("cn", "ten_2", path); err != nil {
+		t.Fatalf("Logout ten_2: %v", err)
+	}
+	active, err = LoadActive("cn", path)
+	if err != nil || active.TenantID != "ten_1" {
+		t.Fatalf("after logout ten_2, active = %+v err=%v, want ten_1 (sorted min)", active, err)
+	}
+
+	// Logging out the last tenant clears the env entirely.
+	if err := Logout("cn", "ten_1", path); err != nil {
+		t.Fatalf("Logout ten_1: %v", err)
+	}
+	if _, err := LoadActive("cn", path); !os.IsNotExist(err) {
+		t.Fatalf("env should be gone after last logout, got err=%v", err)
+	}
+}
+
+// TestLogoutSortedFallbackWhenPreviousMissing covers the branch where the
+// PreviousTenantID points at a tenant that is not the active one but no longer
+// exists: fallback must use the sorted-smallest remaining id, not previous.
+func TestLogoutSortedFallbackWhenPreviousMissing(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "auth.json")
+	_ = SaveCredential(path, Credential{Env: "cn", SessionToken: "s1", TenantID: "ten_b"})
+	_ = SaveCredential(path, Credential{Env: "cn", SessionToken: "s2", TenantID: "ten_a"})
+	_ = SaveCredential(path, Credential{Env: "cn", SessionToken: "s3", TenantID: "ten_c"})
+	// active=ten_c, previous=ten_a.
+
+	// Remove the previous tenant first; this leaves a dangling previous pointer.
+	if err := Logout("cn", "ten_a", path); err != nil {
+		t.Fatalf("Logout ten_a: %v", err)
+	}
+	// active is still ten_c; previous now points at a removed tenant.
+	active, _ := LoadActive("cn", path)
+	if active.TenantID != "ten_c" {
+		t.Fatalf("active = %q, want ten_c", active.TenantID)
+	}
+
+	// Logging out active ten_c: previous (ten_a) is gone, so fall back to the
+	// sorted-smallest remaining id, which is ten_b.
+	if err := Logout("cn", "ten_c", path); err != nil {
+		t.Fatalf("Logout ten_c: %v", err)
+	}
+	active, err := LoadActive("cn", path)
+	if err != nil || active.TenantID != "ten_b" {
+		t.Fatalf("after logout ten_c, active = %+v err=%v, want ten_b (sorted min)", active, err)
+	}
+}
+
+// TestListTenantsIsSortedByTenantID asserts ListTenants returns a deterministic
+// order by tenant id regardless of login order.
+func TestListTenantsIsSortedByTenantID(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "auth.json")
+	_ = SaveCredential(path, Credential{Env: "cn", SessionToken: "s1", TenantID: "ten_3"})
+	_ = SaveCredential(path, Credential{Env: "cn", SessionToken: "s2", TenantID: "ten_1"})
+	_ = SaveCredential(path, Credential{Env: "cn", SessionToken: "s3", TenantID: "ten_2"})
+
+	creds, _, err := ListTenants("cn", path)
+	if err != nil {
+		t.Fatalf("ListTenants: %v", err)
+	}
+	want := []string{"ten_1", "ten_2", "ten_3"}
+	if len(creds) != len(want) {
+		t.Fatalf("len = %d, want %d", len(creds), len(want))
+	}
+	for i, w := range want {
+		if creds[i].TenantID != w {
+			t.Fatalf("creds[%d] = %q, want %q (sorted)", i, creds[i].TenantID, w)
+		}
+	}
+}
+
 func TestLogoutEntireEnv(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "auth.json")
