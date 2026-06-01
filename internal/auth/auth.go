@@ -1,8 +1,21 @@
-// Package auth implements modelgo-cli device login and per-env credential
-// storage. ~/.modelgo/auth.json holds a JSON object keyed by env name, e.g.
-// { "cn": {...}, "test": {...} }. Each value follows the legacy Credential
-// shape. Old flat-format files (single credential object) are auto-migrated
-// to a single "cn" bucket on first read.
+// Package auth implements modelgo-cli device login and multi-tenant credential
+// storage. ~/.modelgo/auth.json holds a JSON object keyed by env name. Each env
+// is a bucket holding every tenant credential the user has logged into for that
+// env plus an active pointer:
+//
+//	{
+//	  "cn": {
+//	    "env": "cn",
+//	    "base_url": "https://api.modelgo.com",
+//	    "active_tenant_id": "ten_2",
+//	    "previous_tenant_id": "ten_1",
+//	    "tenants": { "ten_1": {Credential}, "ten_2": {Credential} }
+//	  }
+//	}
+//
+// Multiple tenants coexist; switching the active tenant (`tenant use`) is a
+// pointer flip and never requires re-login. There is no backward-compatible
+// migration from older flat or single-credential-per-env layouts.
 package auth
 
 import (
@@ -66,6 +79,8 @@ type Credential struct {
 	SessionToken string    `json:"session_token"`
 	AccountID    string    `json:"account_id"`
 	TenantID     string    `json:"tenant_id"`
+	TenantSlug   string    `json:"tenant_slug,omitempty"`
+	TenantName   string    `json:"tenant_name,omitempty"`
 	TokenType    string    `json:"token_type"`
 	ExpiresAt    time.Time `json:"expires_at"`
 	SavedAt      time.Time `json:"saved_at"`
@@ -259,71 +274,37 @@ func postToken(ctx context.Context, client *http.Client, url string, in tokenReq
 	return false, nil
 }
 
-// store is the on-disk shape of ~/.modelgo/auth.json.
-type store map[string]Credential
+// envBucket holds all tenant credentials for one env plus the active pointer.
+type envBucket struct {
+	Env              string                `json:"env"`
+	BaseURL          string                `json:"base_url"`
+	ActiveTenantID   string                `json:"active_tenant_id"`
+	PreviousTenantID string                `json:"previous_tenant_id,omitempty"`
+	Tenants          map[string]Credential `json:"tenants"`
+}
+
+// store is the on-disk shape of ~/.modelgo/auth.json, keyed by env name.
+type store map[string]*envBucket
 
 func loadStore(path string) (store, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	// Bucketed format unmarshals into store; if that fails, fall back
-	// to the legacy flat format and migrate into a "cn" bucket.
 	var s store
-	if err := json.Unmarshal(data, &s); err == nil {
-		if !looksLikeFlatFormat(data) {
-			for name, cred := range s {
-				if cred.Env == "" {
-					cred.Env = name
-					s[name] = cred
-				}
-			}
-			return s, nil
-		}
+	if err := json.Unmarshal(data, &s); err != nil {
+		return nil, fmt.Errorf("parse credential file (run `modelgo auth login` to re-create): %w", err)
 	}
-	// Fall back to legacy flat format.
-	var flat Credential
-	if err := json.Unmarshal(data, &flat); err != nil {
-		return nil, fmt.Errorf("parse credential file: %w", err)
-	}
-	flat.Env = "cn"
-	return store{"cn": flat}, nil
+	return s, nil
 }
 
-func looksLikeFlatFormat(data []byte) bool {
-	var probe map[string]json.RawMessage
-	if err := json.Unmarshal(data, &probe); err != nil {
-		return false
-	}
-	raw, ok := probe["session_token"]
-	if !ok {
-		return false
-	}
-	// In the flat format, session_token is a string. In the bucketed
-	// format, an env literally named "session_token" would have a JSON
-	// object as its value — that's not flat.
-	var asString string
-	return json.Unmarshal(raw, &asString) == nil
-}
-
-func SaveCredential(path string, cred Credential) error {
-	if cred.Env == "" {
-		return errors.New("auth: Credential.Env is required")
-	}
+func writeStore(path string, s store) error {
 	if path == "" {
 		path = DefaultCredentialPath()
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	s, err := loadStore(path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	if s == nil {
-		s = store{}
-	}
-	s[cred.Env] = cred
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
@@ -331,7 +312,65 @@ func SaveCredential(path string, cred Credential) error {
 	return os.WriteFile(path, append(data, '\n'), 0o600)
 }
 
-func LoadCredential(envName, path string) (*Credential, error) {
+func SaveCredential(path string, cred Credential) error {
+	if cred.Env == "" {
+		return errors.New("auth: Credential.Env is required")
+	}
+	if cred.TenantID == "" {
+		return errors.New("auth: Credential.TenantID is required")
+	}
+	if path == "" {
+		path = DefaultCredentialPath()
+	}
+	s, err := loadStore(path)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		s = store{}
+	}
+	b := s[cred.Env]
+	if b == nil {
+		b = &envBucket{Env: cred.Env, BaseURL: cred.BaseURL, Tenants: map[string]Credential{}}
+		s[cred.Env] = b
+	}
+	if b.Tenants == nil {
+		b.Tenants = map[string]Credential{}
+	}
+	b.Env = cred.Env
+	b.BaseURL = cred.BaseURL
+	b.Tenants[cred.TenantID] = cred
+	if b.ActiveTenantID != cred.TenantID {
+		b.PreviousTenantID = b.ActiveTenantID
+		b.ActiveTenantID = cred.TenantID
+	}
+	return writeStore(path, s)
+}
+
+func LoadCredential(envName, tenantID, path string) (*Credential, error) {
+	if envName == "" || tenantID == "" {
+		return nil, errors.New("auth: env and tenant are required")
+	}
+	if path == "" {
+		path = DefaultCredentialPath()
+	}
+	s, err := loadStore(path)
+	if err != nil {
+		return nil, err
+	}
+	b := s[envName]
+	if b == nil {
+		return nil, &os.PathError{Op: "load", Path: path + "#" + envName, Err: os.ErrNotExist}
+	}
+	cred, ok := b.Tenants[tenantID]
+	if !ok {
+		return nil, &os.PathError{Op: "load", Path: path + "#" + envName + "/" + tenantID, Err: os.ErrNotExist}
+	}
+	return &cred, nil
+}
+
+// LoadActive returns the credential the env's active pointer references.
+func LoadActive(envName, path string) (*Credential, error) {
 	if envName == "" {
 		return nil, errors.New("auth: env name is required")
 	}
@@ -342,15 +381,108 @@ func LoadCredential(envName, path string) (*Credential, error) {
 	if err != nil {
 		return nil, err
 	}
-	cred, ok := s[envName]
-	if !ok {
-		return nil, &os.PathError{Op: "load", Path: path + "#" + envName, Err: os.ErrNotExist}
+	b := s[envName]
+	if b == nil || b.ActiveTenantID == "" {
+		return nil, &os.PathError{Op: "load-active", Path: path + "#" + envName, Err: os.ErrNotExist}
 	}
+	cred := b.Tenants[b.ActiveTenantID]
 	return &cred, nil
 }
 
+// ListTenants returns all logged-in credentials for an env plus the active id.
+// A missing store is not an error: it returns (nil, "", nil).
+func ListTenants(envName, path string) ([]Credential, string, error) {
+	if path == "" {
+		path = DefaultCredentialPath()
+	}
+	s, err := loadStore(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, "", nil
+		}
+		return nil, "", err
+	}
+	b := s[envName]
+	if b == nil {
+		return nil, "", nil
+	}
+	out := make([]Credential, 0, len(b.Tenants))
+	for _, c := range b.Tenants {
+		out = append(out, c)
+	}
+	return out, b.ActiveTenantID, nil
+}
+
+// UseTenant flips the env's active pointer to tenantID, recording the prior
+// active tenant as previous. Errors if the tenant is not logged in.
+func UseTenant(envName, tenantID, path string) error {
+	if path == "" {
+		path = DefaultCredentialPath()
+	}
+	s, err := loadStore(path)
+	if err != nil {
+		return err
+	}
+	b := s[envName]
+	if b == nil {
+		return fmt.Errorf("env %q has no logged-in tenants; run `modelgo auth login`", envName)
+	}
+	if _, ok := b.Tenants[tenantID]; !ok {
+		return fmt.Errorf("tenant %q not logged in for env %q; run `modelgo auth login` to add it", tenantID, envName)
+	}
+	if b.ActiveTenantID != tenantID {
+		b.PreviousTenantID = b.ActiveTenantID
+		b.ActiveTenantID = tenantID
+	}
+	return writeStore(path, s)
+}
+
+// UsePreviousTenant switches the active pointer back to the previous tenant.
+func UsePreviousTenant(envName, path string) error {
+	if path == "" {
+		path = DefaultCredentialPath()
+	}
+	s, err := loadStore(path)
+	if err != nil {
+		return err
+	}
+	b := s[envName]
+	if b == nil || b.PreviousTenantID == "" {
+		return fmt.Errorf("no previous tenant to switch back to for env %q", envName)
+	}
+	return UseTenant(envName, b.PreviousTenantID, path)
+}
+
+// ResolveTenantID maps a slug-or-id to a logged-in tenant id within an env.
+func ResolveTenantID(envName, slugOrID, path string) (string, error) {
+	creds, _, err := ListTenants(envName, path)
+	if err != nil {
+		return "", err
+	}
+	for _, c := range creds {
+		if c.TenantID == slugOrID || c.TenantSlug == slugOrID {
+			return c.TenantID, nil
+		}
+	}
+	return "", fmt.Errorf("tenant %q not logged in for env %q", slugOrID, envName)
+}
+
+// ResolveActiveOrFlag resolves the credential a command should use: when
+// flagTenant is non-empty it overrides the active pointer (slug-or-id), else
+// the env's active tenant is used. It never mutates the active pointer.
+func ResolveActiveOrFlag(envName, flagTenant, path string) (*Credential, error) {
+	if strings.TrimSpace(flagTenant) == "" {
+		return LoadActive(envName, path)
+	}
+	tenantID, err := ResolveTenantID(envName, strings.TrimSpace(flagTenant), path)
+	if err != nil {
+		return nil, err
+	}
+	return LoadCredential(envName, tenantID, path)
+}
+
 func Status(envName, path string) (bool, *Credential, error) {
-	cred, err := LoadCredential(envName, path)
+	cred, err := LoadActive(envName, path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil, nil
@@ -363,7 +495,10 @@ func Status(envName, path string) (bool, *Credential, error) {
 	return true, cred, nil
 }
 
-func Logout(envName, path string) error {
+// Logout removes a single tenant from an env when tenantID is non-empty, or the
+// whole env bucket when tenantID is empty. The file is removed when it becomes
+// empty.
+func Logout(envName, tenantID, path string) error {
 	if envName == "" {
 		return errors.New("auth: env name is required")
 	}
@@ -377,21 +512,35 @@ func Logout(envName, path string) error {
 		}
 		return err
 	}
-	if _, ok := s[envName]; !ok {
+	b := s[envName]
+	if b == nil {
 		return nil
 	}
-	delete(s, envName)
+	if tenantID == "" { // clear the whole env
+		delete(s, envName)
+	} else {
+		delete(b.Tenants, tenantID)
+		if b.PreviousTenantID == tenantID {
+			b.PreviousTenantID = ""
+		}
+		if b.ActiveTenantID == tenantID {
+			b.ActiveTenantID = ""
+			for id := range b.Tenants { // fall back to any remaining tenant
+				b.ActiveTenantID = id
+				break
+			}
+		}
+		if len(b.Tenants) == 0 {
+			delete(s, envName)
+		}
+	}
 	if len(s) == 0 {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		return nil
 	}
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, append(data, '\n'), 0o600)
+	return writeStore(path, s)
 }
 
 func LogoutAll(path string) error {
