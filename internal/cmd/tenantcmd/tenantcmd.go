@@ -218,8 +218,4 @@ FLAGS:
     --remote             (list only) Also fetch all account tenants from the server`)
 }
 
-// runListRemote fetches all account tenants from the server and merges them
-// with locally logged-in tenants. Implemented in tenantcmd_remote.go.
-func runListRemote(stdout, stderr io.Writer, envName, path string) error {
-	return fmt.Errorf("--remote is not yet available")
-}
+// runListRemote is implemented in tenantcmd_remote.go.
