@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	cliauth "github.com/modelgo/modelgo-cli/internal/auth"
 	"github.com/modelgo/modelgo-cli/internal/cmd/envcmd"
+	"github.com/modelgo/modelgo-cli/internal/cmd/tenantcmd"
 	"github.com/modelgo/modelgo-cli/internal/config"
 	"github.com/modelgo/modelgo-cli/internal/env"
 	"github.com/modelgo/modelgo-cli/internal/hello"
@@ -23,6 +25,14 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	// Strip a leading global --tenant <slug|id> override before dispatching.
+	// It selects which logged-in tenant's credential authenticated openapi
+	// commands use, overriding the env's active pointer for that one
+	// invocation. No openapi business commands exist yet, so today this only
+	// validates and threads the value to auth.ResolveActiveOrFlag.
+	args, globalTenant := extractTenantFlag(args)
+	_ = globalTenant
+
 	if len(args) < 1 {
 		printUsage(stderr)
 		return 2
@@ -39,12 +49,43 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runAuth(args[1:], stdout, stderr)
 	case "env":
 		return envcmd.Run(args[1:], stdout, stderr)
+	case "tenant":
+		return tenantcmd.Run(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage(stderr)
 		return 2
 	}
 	return 0
+}
+
+// extractTenantFlag pulls a leading global `--tenant <value>` (or
+// `--tenant=<value>`) out of args, returning the remaining args and the value.
+// Only a leading occurrence (before the subcommand) is treated as global; a
+// `--tenant` that appears after the subcommand is left for that subcommand's
+// own flag set.
+func extractTenantFlag(args []string) (rest []string, tenant string) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--tenant":
+			if i+1 < len(args) {
+				tenant = args[i+1]
+				return append(args[:i:i], args[i+2:]...), tenant
+			}
+			return args[:i:i], ""
+		case strings.HasPrefix(a, "--tenant="):
+			tenant = strings.TrimPrefix(a, "--tenant=")
+			return append(args[:i:i], args[i+1:]...), tenant
+		case strings.HasPrefix(a, "-"):
+			// Another global flag; keep scanning.
+			continue
+		default:
+			// First positional token is the subcommand; stop scanning.
+			return args, ""
+		}
+	}
+	return args, ""
 }
 
 func runHello(args []string, stdout, stderr io.Writer) int {
@@ -332,6 +373,8 @@ COMMANDS:
     env use <name>        Switch the active env
     env add <name>        Register or override an env URL
     env remove <name>     Remove a custom env or override
+    tenant list           List logged-in tenants for the active env
+    tenant use <slug|id>  Switch the active tenant (use '-' to go back)
     hello [--name NAME]   Print a greeting
     --version, -v         Print the version
     --help, -h            Show this help`)
