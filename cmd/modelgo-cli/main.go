@@ -245,7 +245,11 @@ func runAuthStatus(args []string, stdout, stderr io.Writer) int {
 			})
 		}
 	} else if ok {
-		fmt.Fprintf(stdout, "Logged in as %s (env %s)\n", cred.AccountID, envName)
+		tenant := cred.TenantSlug
+		if tenant == "" {
+			tenant = cred.TenantID
+		}
+		fmt.Fprintf(stdout, "Logged in as %s (env %s, tenant %s)\n", cred.AccountID, envName, tenant)
 	} else {
 		fmt.Fprintf(stdout, "Not logged in (env %s)\n", envName)
 	}
@@ -259,6 +263,7 @@ func runAuthLogout(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("auth logout", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	envFlag := fs.String("env", "", "env to log out of (default: active env from config)")
+	tenantFlag := fs.String("tenant", "", "log out of a single tenant (slug or id) instead of the whole env")
 	configPath := fs.String("config", "", "config file path")
 	store := fs.String("store", "", "credential store path")
 	all := fs.Bool("all", false, "log out of all envs")
@@ -283,11 +288,25 @@ func runAuthLogout(args []string, stdout, stderr io.Writer) int {
 		}
 		envName = env.ActiveEnv("", cfg)
 	}
-	if err := cliauth.Logout(envName, *store); err != nil {
+
+	tenantID := ""
+	if *tenantFlag != "" {
+		id, err := cliauth.ResolveTenantID(envName, *tenantFlag, *store)
+		if err != nil {
+			fmt.Fprintf(stderr, "auth logout: %v\n", err)
+			return 1
+		}
+		tenantID = id
+	}
+	if err := cliauth.Logout(envName, tenantID, *store); err != nil {
 		fmt.Fprintf(stderr, "auth logout failed: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "Logged out of env %s\n", envName)
+	if tenantID != "" {
+		fmt.Fprintf(stdout, "Logged out of tenant %s (env %s)\n", tenantID, envName)
+	} else {
+		fmt.Fprintf(stdout, "Logged out of env %s\n", envName)
+	}
 	return 0
 }
 
@@ -331,6 +350,7 @@ COMMANDS:
 
 FLAGS:
     --env NAME       Operate on a specific env (default: active env from config)
+    --tenant SLUG    (logout) Clear a single tenant instead of the whole env
     --config PATH    Config file path (default ~/.modelgo/config.json)
     --store PATH     Credential store path (default ~/.modelgo/auth.json)
     --all            (logout) Clear all envs`)
