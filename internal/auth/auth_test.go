@@ -7,9 +7,112 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+// The real modelgo gateway wraps every response in a {code,msg,data} envelope
+// (observed on the test backend). These tests pin the CLI's tolerance for that
+// envelope while the older flat-shape tests above keep backward compatibility.
+
+func TestLoginUnwrapsEnvelopedAuthorizeResponse(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0,
+			"msg":  "ok",
+			"data": authorizeResponse{
+				DeviceCode:      "dev-env",
+				UserCode:        "WXYZ-1234",
+				VerificationURL: "https://app.example/device?user_code=WXYZ-1234",
+				ExpiresIn:       600,
+				Interval:        5,
+			},
+		})
+	}))
+	defer srv.Close()
+
+	got, err := Login(context.Background(), Options{
+		Env:       "test",
+		BaseURL:   srv.URL,
+		NoWait:    true,
+		StorePath: filepath.Join(t.TempDir(), "auth.json"),
+	})
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if got.DeviceCode != "dev-env" || got.UserCode != "WXYZ-1234" || got.VerificationURL == "" {
+		t.Fatalf("result = %+v", got)
+	}
+}
+
+func TestLoginTreatsEmptyEnvelopedTokenAsPending(t *testing.T) {
+	t.Parallel()
+	polls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		polls++
+		if polls == 1 {
+			// Enveloped pending: HTTP 200, code 0, but data.session_token empty.
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code": 0, "msg": "ok", "data": tokenResponse{},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0, "msg": "ok",
+			"data": tokenResponse{
+				SessionToken:     "sid_env",
+				AccountID:        "acc_e",
+				TenantID:         "ten_e",
+				ExpiresIn:        3600,
+				TokenType:        "Session",
+				SessionExpiresAt: "2026-06-01T10:00:00Z",
+			},
+		})
+	}))
+	defer srv.Close()
+
+	got, err := Login(context.Background(), Options{
+		Env:        "test",
+		BaseURL:    srv.URL,
+		DeviceCode: "dev-1",
+		StorePath:  filepath.Join(t.TempDir(), "auth.json"),
+		PollDelay:  func(time.Duration) {},
+	})
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if !got.Authenticated || got.TenantID != "ten_e" {
+		t.Fatalf("result = %+v", got)
+	}
+	if polls < 2 {
+		t.Fatalf("expected at least 2 polls (pending then success), got %d", polls)
+	}
+}
+
+func TestLoginReturnsEnvelopedBusinessError(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 40001, "msg": "invalid client", "data": nil,
+		})
+	}))
+	defer srv.Close()
+
+	_, err := Login(context.Background(), Options{
+		Env:       "test",
+		BaseURL:   srv.URL,
+		NoWait:    true,
+		StorePath: filepath.Join(t.TempDir(), "auth.json"),
+	})
+	if err == nil {
+		t.Fatal("want error for business code != 0")
+	}
+	if !strings.Contains(err.Error(), "invalid client") {
+		t.Fatalf("error = %v, want it to contain server msg", err)
+	}
+}
 
 func TestLoginNoWaitReturnsDeviceInstructionsWithoutWritingCredential(t *testing.T) {
 	t.Parallel()

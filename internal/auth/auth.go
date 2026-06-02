@@ -226,6 +226,41 @@ func pollAndStore(ctx context.Context, opts Options, deviceCode string, expiresI
 	}
 }
 
+// apiEnvelope is the gateway's standard wrapper: {"code":0,"msg":"ok","data":{...}}.
+// Code and Data are pointers/raw so we can tell an enveloped response (keys
+// present) apart from an older flat response (keys absent) and stay backward
+// compatible with both.
+type apiEnvelope struct {
+	Code *int            `json:"code"`
+	Msg  string          `json:"msg"`
+	Data json.RawMessage `json:"data"`
+}
+
+// decodeBody unmarshals an API response body into out, transparently unwrapping
+// the {code,msg,data} envelope when present. A non-zero code is treated as a
+// business error carrying msg. Flat (un-enveloped) bodies decode whole.
+func decodeBody(body []byte, out any) error {
+	var env apiEnvelope
+	enveloped := false
+	if err := json.Unmarshal(body, &env); err == nil && (env.Code != nil || env.Data != nil) {
+		enveloped = true
+	}
+	if !enveloped {
+		return json.Unmarshal(body, out)
+	}
+	if env.Code != nil && *env.Code != 0 {
+		msg := env.Msg
+		if msg == "" {
+			msg = "request failed"
+		}
+		return fmt.Errorf("%s (code %d)", msg, *env.Code)
+	}
+	if len(env.Data) == 0 || string(env.Data) == "null" {
+		return nil // leave out at its zero value (e.g. pending token)
+	}
+	return json.Unmarshal(env.Data, out)
+}
+
 func postJSON(ctx context.Context, client *http.Client, url string, in any, out any) error {
 	payload, err := json.Marshal(in)
 	if err != nil {
@@ -245,7 +280,11 @@ func postJSON(ctx context.Context, client *http.Client, url string, in any, out 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	return decodeBody(body, out)
 }
 
 func postToken(ctx context.Context, client *http.Client, url string, in tokenRequest, out *tokenResponse) (bool, error) {
@@ -264,14 +303,26 @@ func postToken(ctx context.Context, client *http.Client, url string, in tokenReq
 		return false, err
 	}
 	defer resp.Body.Close()
+	// HTTP 202 is the older pending signal; the enveloped gateway instead
+	// returns HTTP 200 with an empty session_token while authorization is
+	// pending (detected below), so both shapes are handled.
 	if resp.StatusCode == http.StatusAccepted {
 		return true, nil
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return false, fmt.Errorf("device token: HTTP %d", resp.StatusCode)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return false, err
+	}
+	if err := decodeBody(body, out); err != nil {
+		return false, err
+	}
+	// Empty session_token on an otherwise-OK response means the user has not
+	// approved yet: keep polling.
+	if out.SessionToken == "" {
+		return true, nil
 	}
 	return false, nil
 }
