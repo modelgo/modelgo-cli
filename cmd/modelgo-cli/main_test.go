@@ -67,6 +67,13 @@ func TestRunAuthLoginNoWaitJSON(t *testing.T) {
 	if body["device_code"] != "device-1" || body["verification_url"] == "" {
 		t.Fatalf("body=%v", body)
 	}
+	if body["event"] != "device_authorization" {
+		t.Fatalf("event=%v", body["event"])
+	}
+	hint, _ := body["hint"].(string)
+	if !strings.Contains(hint, "opaque string") || !strings.Contains(hint, "modelgo auth login --device-code device-1") {
+		t.Fatalf("hint=%q", hint)
+	}
 }
 
 func TestRunAuthLoginPrintsURLAndStoresCredentialUnderEnv(t *testing.T) {
@@ -118,6 +125,67 @@ func TestRunAuthLoginPrintsURLAndStoresCredentialUnderEnv(t *testing.T) {
 	}
 }
 
+func TestRunAuthLoginBlockingJSONFirstEventCarriesAgentHint(t *testing.T) {
+	t.Parallel()
+
+	tokenCalls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/auth/device/authorize":
+			_, _ = w.Write([]byte(`{
+				"device_code":"device-1",
+				"user_code":"ABCD-EFGH",
+				"verification_url":"https://app.example/device?user_code=ABCD-EFGH",
+				"expires_in":600,
+				"interval":1
+			}`))
+		case "/v1/auth/device/token":
+			tokenCalls++
+			_, _ = w.Write([]byte(`{
+				"session_token":"sid_cli",
+				"account_id":"acc_1",
+				"tenant_id":"ten_1",
+				"expires_in":3600,
+				"token_type":"Session",
+				"session_expires_at":"2026-05-26T10:00:00Z"
+			}`))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	cfgPath := writeTestEnvConfig(t, dir, srv.URL)
+	storePath := filepath.Join(dir, "auth.json")
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"auth", "login",
+		"--config", cfgPath,
+		"--store", storePath,
+		"--json",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, stderr.String())
+	}
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("stdout lines=%d want 2 stdout=%s", len(lines), stdout.String())
+	}
+	var first map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &first); err != nil {
+		t.Fatalf("first line not JSON: %v", err)
+	}
+	if first["event"] != "device_authorization" {
+		t.Fatalf("first event=%v", first["event"])
+	}
+	hint, _ := first["agent_hint"].(string)
+	if !strings.Contains(hint, "final turn messages") || !strings.Contains(hint, "modelgo auth login --device-code device-1") {
+		t.Fatalf("agent_hint=%q", hint)
+	}
+}
+
 func TestRunAuthStatusNotLoggedIn(t *testing.T) {
 	t.Parallel()
 
@@ -149,6 +217,27 @@ func TestUsageMentionsAuthAndEnv(t *testing.T) {
 	// Help text must say "modelgo" not "modelgo-cli".
 	if strings.Contains(out, "modelgo-cli") {
 		t.Fatalf("help still mentions modelgo-cli: %s", out)
+	}
+}
+
+func TestAuthLoginHelpMentionsBlockingAndSplitFlow(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"auth", "login", "--help"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"device authorization login",
+		"Block and poll until authorization completes",
+		"modelgo auth login --no-wait --json",
+		"modelgo auth login --device-code <DEVICE_CODE>",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("help missing %q: %s", want, out)
+		}
 	}
 }
 

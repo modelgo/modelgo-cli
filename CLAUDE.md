@@ -9,7 +9,7 @@
 |-|-|
 | GitHub | [github.com/modelgo/modelgo-cli](https://github.com/modelgo/modelgo-cli)（public） |
 | npm 包 | `@model-go/cli`（scope `model-go`，因 `modelgo` 已被占用） |
-| 二进制名 | `modelgo-cli` |
+| CLI 命令 | `modelgo` |
 | 安装 | `npx @model-go/cli@latest install` |
 
 ## 开发纪律
@@ -24,7 +24,7 @@
 
 | 阶段 | 谁参与 | 分发渠道 | 命令 |
 |-|-|-|-|
-| ① 本地自测 | 开发者本人 | 本机 `npm pack` tarball | `npm install -g ./model-go-cli-x.y.z.tgz` |
+| ① 本地自测 | 开发者本人 | 本地二进制 + 本机 `npm pack` tarball + 本地 skills | `make build` / `npm install -g ./model-go-cli-x.y.z.tgz` / `npx -y skills add . -y -g` |
 | ② RC 内测 | QA / 早期用户 | npm `rc` dist-tag（公开但 opt-in） | `npx @model-go/cli@rc install` |
 | ③ 正式发布 | 所有用户 | npm `latest` dist-tag | `npx @model-go/cli@latest install` |
 
@@ -34,16 +34,45 @@
 
 ### ① 本地自测（不动 npm registry，无需 token）
 
+本地自测分三层，目的不同，不要混成一步：
+
+1. **验证本地 Go 改动**
+
 ```bash
 cd ~/code/modelgo/modelgo-cli
-make build                              # Go 有改动时必须先编译到 bin/，否则 npm pack 带的是旧二进制
+make build
+./bin/modelgo --version
+./bin/modelgo hello
+# 有鉴权改动时继续跑：
+# ./bin/modelgo auth login
+```
+
+2. **验证 npm wrapper / postinstall 安装链路**
+
+```bash
 npm pack                                # 产出 model-go-cli-0.1.x.tgz
 npm install -g ./model-go-cli-0.1.x.tgz
-modelgo-cli --version && modelgo-cli hello
-# 恢复公开版本：
-npm uninstall -g @model-go/cli && npx @model-go/cli@latest install
+modelgo --version
 ```
-仅验证本机安装链路，不验证 CI / GitHub Release 下载链路。
+
+注意：
+- 这一步**不会**使用工作区里的 `./bin/modelgo`。
+- `postinstall` 会按 `package.json` 的版本号下载远端 release binary，所以验证的是 npm tarball + `scripts/install.js`，**不是**本地 Go 改动。
+- 这一步也**不会**安装 `skills/`，因为 npm tarball 的 `files` 白名单不包含 `skills/`。
+
+3. **验证本地 skills**
+
+```bash
+npx -y skills add . -y -g
+# 在 AI agent 新会话里验证：modelgo-* skill 出现、AI 能主动调用 `modelgo hello`
+```
+
+恢复公开版本：
+
+```bash
+npm uninstall -g @model-go/cli
+npx @model-go/cli@latest install
+```
 
 ### ② 发 rc 给 QA 内测
 
@@ -55,8 +84,8 @@ npm view @model-go/cli dist-tags        # 例：{ latest: '0.1.1', rc: '0.1.2-rc
 QA 安装并验证（主动 opt-in rc 频道）：
 ```bash
 npx @model-go/cli@rc install
-modelgo-cli --version                   # 应为 rc 版而非 latest
-# 在 AI agent 新会话里验证：modelgo-* skill 出现、AI 能主动调用 modelgo-cli hello
+modelgo --version                       # 应为 rc 版而非 latest
+# 在 AI agent 新会话里验证：modelgo-* skill 出现、AI 能主动调用 modelgo hello
 ```
 迭代：修代码 → `make release VERSION=0.1.2-rc.2` → QA `npx @model-go/cli@rc install`（wizard 自动升级 rc.1→rc.2）。
 QA 反馈建议用 GitHub issue label `rc-feedback` 收集。
@@ -71,7 +100,7 @@ QA 从 rc 切回 stable：
 - **Case B（rc 被砍 / 想装更旧的 stable）**：wizard 不允许自动降级，必须先 `npm uninstall -g @model-go/cli` 再 `npx @model-go/cli@latest install`。
 - **保险做法**：每次正式发布后统一清理重装回干净 stable：
   ```bash
-  npm uninstall -g @model-go/cli && npx @model-go/cli@latest install && modelgo-cli --version
+  npm uninstall -g @model-go/cli && npx @model-go/cli@latest install && modelgo --version
   ```
 
 ### 时间线示例（v0.1.1 → v0.1.2）
@@ -103,7 +132,7 @@ QA 从 rc 切回 stable：
 
 | 命令 | 作用 |
 |-|-|
-| `make build` | 编译 Go 二进制到 `bin/modelgo-cli`（npm pack 前需先跑） |
+| `make build` | 编译本地 Go 二进制到 `bin/modelgo` |
 | `make test` | `go test -race ./...` + `npm test` + `npm run lint:skills` |
 | `make push` / `make push-tags` | push main / 所有 tag 到 GitHub |
 | `make release VERSION=x.y.z` | 稳定版：tag `vx.y.z` → CI 走 `@latest` |
