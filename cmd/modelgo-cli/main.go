@@ -12,7 +12,10 @@ import (
 	"time"
 
 	cliauth "github.com/modelgo/modelgo-cli/internal/auth"
+	"github.com/modelgo/modelgo-cli/internal/cmd/balancecmd"
 	"github.com/modelgo/modelgo-cli/internal/cmd/envcmd"
+	"github.com/modelgo/modelgo-cli/internal/cmd/logscmd"
+	"github.com/modelgo/modelgo-cli/internal/cmd/permissionscmd"
 	"github.com/modelgo/modelgo-cli/internal/cmd/tenantcmd"
 	"github.com/modelgo/modelgo-cli/internal/config"
 	"github.com/modelgo/modelgo-cli/internal/env"
@@ -53,6 +56,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return envcmd.Run(args[1:], stdout, stderr)
 	case "tenant":
 		return tenantcmd.Run(args[1:], stdout, stderr)
+	case "balance":
+		return balancecmd.Run(args[1:], stdout, stderr)
+	case "permissions":
+		return permissionscmd.Run(args[1:], stdout, stderr)
+	case "logs":
+		return logscmd.Run(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage(stderr)
@@ -391,6 +400,9 @@ COMMANDS:
     env remove <name>     Remove a custom env or override
     tenant list           List logged-in tenants for the active env
     tenant use <slug|id>  Switch the active tenant (use '-' to go back)
+    balance               View tenant balance and transactions
+    permissions           View account permissions
+    logs                  Query call logs and usage statistics
     hello [--name NAME]   Print a greeting
     --version, -v         Print the version
     --help, -h            Show this help`)

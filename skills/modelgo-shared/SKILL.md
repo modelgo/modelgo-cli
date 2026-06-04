@@ -37,8 +37,11 @@ Currently available commands:
 - `modelgo auth status` — show local login status
 - `modelgo auth logout` — clear local credentials (`--all` clears every env)
 - `modelgo env list` / `modelgo env use <name>` / `modelgo env add <name> --base-url URL` — manage environments (`cn`, `intl`, or custom)
+- `modelgo balance` — view tenant balance, transactions, and grant status
+- `modelgo permissions` — view account permissions and accessible menus
+- `modelgo logs` — query call logs, statistics, and usage summaries
 
-API key management, usage queries, and model gateway commands are not implemented yet. If the user asks for a feature that isn't in `modelgo --help`, tell them it's not available yet and suggest filing an issue at https://github.com/modelgo/modelgo-cli/issues.
+Features not listed in `modelgo --help` are not implemented yet. If the user asks for a feature that isn't available, suggest filing an issue at https://github.com/modelgo/modelgo-cli/issues.
 
 For non-streaming agent harnesses, prefer split-flow:
 
