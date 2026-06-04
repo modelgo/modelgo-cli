@@ -8,6 +8,7 @@ dist/
 # Node
 node_modules/
 npm-debug.log*
+model-go-cli-*.tgz
 
 # OS
 .DS_Store

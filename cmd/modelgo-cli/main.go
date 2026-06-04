@@ -20,6 +20,8 @@ import (
 	"github.com/modelgo/modelgo-cli/internal/version"
 )
 
+const agentSplitFlowHint = "Show verification_url to the user exactly as returned by the CLI and treat it as an opaque string. Do not URL-encode or decode it, do not normalize or rewrite it, do not add %%20, spaces, or punctuation, and do not wrap it as Markdown link text; prefer a fenced code block containing only the raw URL. For agent harnesses that only deliver final turn messages, make the URL the final message of the turn and return control to the user; do not block on --device-code in the same turn. After the user confirms authorization in a later step, run: modelgo auth login --device-code %s"
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -142,6 +144,13 @@ func resolveEnvAndURL(envFlag, configPath string, stderr io.Writer) (envName, ba
 }
 
 func runAuthLogin(args []string, stdout, stderr io.Writer) int {
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			printAuthLoginUsage(stdout)
+			return 0
+		}
+	}
+
 	fs := flag.NewFlagSet("auth login", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	envFlag := fs.String("env", "", "env to log into (default: active env from config)")
@@ -197,6 +206,10 @@ func runAuthLogin(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if *deviceCode == "" {
+		if !*jsonOut {
+			fmt.Fprintln(stderr, "This command blocks until authorization completes.")
+			fmt.Fprintln(stderr, "For non-streaming agent harnesses, use `modelgo auth login --no-wait --json`, return the verification_url to the user, then run `modelgo auth login --device-code <code>` after the user confirms approval.")
+		}
 		fmt.Fprintln(stderr, "Waiting for authorization...")
 		result, err = cliauth.Login(ctx, cliauth.Options{
 			Env:        envName,
@@ -230,6 +243,7 @@ func loginJSON(result *cliauth.LoginResult, noWait bool) map[string]any {
 		}
 	}
 	out := map[string]any{
+		"event":            "device_authorization",
 		"env":              result.Env,
 		"verification_url": result.VerificationURL,
 		"device_code":      result.DeviceCode,
@@ -238,7 +252,9 @@ func loginJSON(result *cliauth.LoginResult, noWait bool) map[string]any {
 		"interval":         result.Interval,
 	}
 	if noWait {
-		out["hint"] = fmt.Sprintf("Show verification_url to the user exactly as returned. After approval, run: modelgo auth login --device-code %s", result.DeviceCode)
+		out["hint"] = fmt.Sprintf(agentSplitFlowHint, result.DeviceCode)
+	} else {
+		out["agent_hint"] = fmt.Sprintf(agentSplitFlowHint, result.DeviceCode)
 	}
 	return out
 }
@@ -397,4 +413,32 @@ FLAGS:
     --config PATH    Config file path (default ~/.modelgo/config.json)
     --store PATH     Credential store path (default ~/.modelgo/auth.json)
     --all            (logout) Clear all envs`)
+}
+
+func printAuthLoginUsage(w io.Writer) {
+	fmt.Fprintln(w, `modelgo auth login — device authorization login
+
+USAGE:
+    modelgo auth login [flags]
+
+DEFAULT FLOW:
+    1. Request a device_code and verification_url
+    2. Print the URL for the user to open in their browser
+    3. Block and poll until authorization completes
+
+AGENT FLOW:
+    For non-streaming agent harnesses, use:
+      modelgo auth login --no-wait --json
+    Return verification_url to the user exactly as printed, end the turn, then
+    after the user confirms approval run:
+      modelgo auth login --device-code <DEVICE_CODE>
+
+FLAGS:
+    --env NAME       Env to log into (default: active env from config)
+    --scope SCOPE    Space- or comma-separated scopes to request
+    --config PATH    Config file path (default ~/.modelgo/config.json)
+    --store PATH     Credential store path (default ~/.modelgo/auth.json)
+    --no-wait        Print device authorization URL and return immediately
+    --device-code    Poll an existing device code
+    --json           Write structured JSON output (NDJSON in blocking mode)`)
 }

@@ -32,6 +32,10 @@ modelgo hello [--name NAME]
 modelgo --help
 ```
 
+`modelgo auth login` without `--no-wait` is a blocking command: it prints the
+authorization URL, then keeps polling until the browser approval completes or
+the device code expires.
+
 ### Environments
 
 The CLI talks to a named environment. Two are built in:
@@ -71,6 +75,10 @@ For AI-agent harnesses that cannot stream intermediate output to the user, use:
 modelgo auth login --no-wait --json
 modelgo auth login --device-code <DEVICE_CODE>
 ```
+
+Do not show the URL and then immediately block on `--device-code` in the same
+turn. In final-message-only harnesses, that pattern prevents the user from ever
+seeing the URL before the agent starts waiting.
 
 > **`--json` emits newline-delimited JSON (NDJSON).** In the default waiting
 > flow (`modelgo auth login --json` without `--no-wait`), stdout receives two

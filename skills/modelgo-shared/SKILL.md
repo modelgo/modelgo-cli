@@ -40,7 +40,22 @@ Currently available commands:
 
 API key management, usage queries, and model gateway commands are not implemented yet. If the user asks for a feature that isn't in `modelgo --help`, tell them it's not available yet and suggest filing an issue at https://github.com/modelgo/modelgo-cli/issues.
 
-For non-streaming agent harnesses, use `modelgo auth login --no-wait --json`, return the `verification_url` to the user exactly as printed, then after the user confirms approval run `modelgo auth login --device-code <device_code>`.
+For non-streaming agent harnesses, prefer split-flow:
+
+```bash
+modelgo auth login --no-wait --json
+```
+
+Return the `verification_url` to the user exactly as printed and end the turn.
+Do not show the URL and then immediately block on `modelgo auth login --device-code ...`
+in the same turn; in final-message-only harnesses that prevents the user from
+seeing the URL before the agent starts waiting.
+
+After the user confirms approval in a later step, resume polling:
+
+```bash
+modelgo auth login --device-code <device_code>
+```
 
 ## Troubleshooting
 
