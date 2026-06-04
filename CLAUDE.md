@@ -34,12 +34,11 @@
 
 ### ① 本地自测（不动 npm registry，无需 token）
 
-本地自测分三层，目的不同，不要混成一步：
+本地自测分两层，目的不同，不要混成一步：
 
 1. **验证本地 Go 改动**
 
 ```bash
-cd ~/code/modelgo/modelgo-cli
 make build
 ./bin/modelgo --version
 ./bin/modelgo hello
@@ -47,30 +46,23 @@ make build
 # ./bin/modelgo auth login
 ```
 
-2. **验证 npm wrapper / postinstall 安装链路**
+2. **验证 npm wrapper + skills 全链路**（一行搞定）
 
 ```bash
-npm pack                                # 产出 model-go-cli-0.1.x.tgz
-npm install -g ./model-go-cli-0.1.x.tgz
+make install-local
 modelgo --version
 ```
 
+`make install-local` 会依次执行：`make build` → `npm pack` → `npm install -g ... --ignore-scripts` → 拷贝本地 binary → `npx skills add . -y -g`。
+
 注意：
-- 这一步**不会**使用工作区里的 `./bin/modelgo`。
-- `postinstall` 会按 `package.json` 的版本号下载远端 release binary，所以验证的是 npm tarball + `scripts/install.js`，**不是**本地 Go 改动。
-- 这一步也**不会**安装 `skills/`，因为 npm tarball 的 `files` 白名单不包含 `skills/`。
-
-3. **验证本地 skills**
-
-```bash
-npx -y skills add . -y -g
-# 在 AI agent 新会话里验证：modelgo-* skill 出现、AI 能主动调用 `modelgo hello`
-```
+- `--ignore-scripts` 跳过了 postinstall 的远端 binary 下载，使用的是本地编译的 `./bin/modelgo`。
+- npm tarball 的 `files` 白名单不包含 `skills/`，所以 skills 是从本地工作目录独立安装的。
 
 恢复公开版本：
 
 ```bash
-npm uninstall -g @model-go/cli
+make uninstall-local
 npx @model-go/cli@latest install
 ```
 
@@ -133,6 +125,8 @@ QA 从 rc 切回 stable：
 | 命令 | 作用 |
 |-|-|
 | `make build` | 编译本地 Go 二进制到 `bin/modelgo` |
+| `make install-local` | 一键本地安装：build → pack → npm install → 拷贝 binary → 安装 skills |
+| `make uninstall-local` | 清理全局 `@model-go/cli` |
 | `make test` | `go test -race ./...` + `npm test` + `npm run lint:skills` |
 | `make push` / `make push-tags` | push main / 所有 tag 到 GitHub |
 | `make release VERSION=x.y.z` | 稳定版：tag `vx.y.z` → CI 走 `@latest` |

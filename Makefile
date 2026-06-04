@@ -2,7 +2,7 @@ GITHUB_URL := git@github.com:modelgo/modelgo-cli.git
 GITHUB_REMOTE := github
 BRANCH := main
 
-.PHONY: help github-remote push push-tags release test build clean
+.PHONY: help github-remote push push-tags release test build clean install-local uninstall-local
 
 help:
 	@echo "modelgo-cli — common dev targets"
@@ -12,6 +12,8 @@ help:
 	@echo "  make release VERSION=0.1.0 Tag v<VERSION> and push tag → triggers release workflow"
 	@echo "  make test                  go test + npm test + lint:skills"
 	@echo "  make build                 Build local Go binary into bin/"
+	@echo "  make install-local         Build, pack, install locally (npm + binary + skills)"
+	@echo "  make uninstall-local       Remove global @model-go/cli"
 	@echo "  make clean                 Remove bin/ dist/ node_modules/"
 
 github-remote:
@@ -45,3 +47,17 @@ build:
 
 clean:
 	rm -rf bin/ dist/ node_modules/
+
+VERSION_JS := $(shell node -p "require('./package.json').version")
+
+install-local: build
+	npm pack
+	npm install -g ./model-go-cli-$(VERSION_JS).tgz --ignore-scripts
+	@mkdir -p "$(shell npm root -g)/@model-go/cli/bin"
+	cp bin/modelgo "$(shell npm root -g)/@model-go/cli/bin/modelgo"
+	npx -y skills add . -y -g
+	@echo "✓ Local install complete — try: modelgo --version"
+
+uninstall-local:
+	npm uninstall -g @model-go/cli
+	@echo "✓ Uninstalled — restore stable with: npx @model-go/cli@latest install"
