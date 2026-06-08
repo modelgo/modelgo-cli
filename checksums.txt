@@ -1,6 +1,6 @@
-915ed381929af9346da75a8cd05cc2e07e2dffad87a2611273e62950888d3a13  modelgo-cli-0.1.2-rc.1-darwin-amd64.tar.gz
-db43edac818eba5d1275c47e7a8cf6bce87d46565a54fc9db276bce92b861051  modelgo-cli-0.1.2-rc.1-darwin-arm64.tar.gz
-fbc7e92c959f5d62ced3940481afbd444655f91129acbb7bc6ff5f8d9a200729  modelgo-cli-0.1.2-rc.1-linux-amd64.tar.gz
-d9fb3ccf896bb4b493b3af2a095d9406c54809d01b97734929135ae6347c07ec  modelgo-cli-0.1.2-rc.1-linux-arm64.tar.gz
-0cc9d8681d4be1718641ae1dfb609c4e967aa741150cff9a5b598c7a962931e2  modelgo-cli-0.1.2-rc.1-windows-amd64.zip
-608930e7904701a794f3350ca594fbc992b35eaee619c25e6c082172c05c69ac  modelgo-cli-0.1.2-rc.1-windows-arm64.zip
+818fc80cdbb471fe9abd2373c30795f4a138f4be4c812cdb3d25148b71a131ed  modelgo-0.1.2-darwin-amd64.tar.gz
+cb981e35d3652d2b0e3d50c0f0eadfd8ee1497887d1e529f7630581c8cfb29e5  modelgo-0.1.2-darwin-arm64.tar.gz
+974822455dd0b423e91a096b00fb6d28750f42ceb982185a434d14d6396974dd  modelgo-0.1.2-linux-amd64.tar.gz
+f388c0e1d23df86a24650b7bcbd2424b5a232b81a0a3f7bb426ad31781fa1217  modelgo-0.1.2-linux-arm64.tar.gz
+5d96a2409132650dd4a98dcc8d1d0f44d519fde5de816550e53db7aba6ae629a  modelgo-0.1.2-windows-amd64.zip
+ea37a1341c87afd2f3cddfe5027a3e8203532cf5432b329c6caa8b4ce506cc05  modelgo-0.1.2-windows-arm64.zip
