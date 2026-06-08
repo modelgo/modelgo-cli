@@ -9,7 +9,7 @@ help:
 	@echo ""
 	@echo "  make push                  Push $(BRANCH) to GitHub (creates '$(GITHUB_REMOTE)' remote if missing)"
 	@echo "  make push-tags             Push all tags to GitHub"
-	@echo "  make release VERSION=0.1.0 Tag v<VERSION> and push tag → triggers release workflow"
+	@echo "  make release VERSION=0.1.0 Bump checksums → commit → push main → tag → triggers release"
 	@echo "  make test                  go test + npm test + lint:skills"
 	@echo "  make build                 Build local Go binary into bin/"
 	@echo "  make install-local         Build, pack, install locally (npm + binary + skills)"
@@ -30,6 +30,12 @@ push-tags: github-remote
 
 release: github-remote
 	@if [ -z "$(VERSION)" ]; then echo "Usage: make release VERSION=0.1.0"; exit 1; fi
+	@echo "Generating checksums for v$(VERSION)..."
+	goreleaser release --snapshot --clean
+	cp dist/checksums.txt checksums.txt
+	git add checksums.txt
+	git diff --cached --quiet -- checksums.txt || git commit -m "chore: update checksums.txt for v$(VERSION)"
+	git push $(GITHUB_REMOTE) $(BRANCH)
 	git tag v$(VERSION)
 	git push $(GITHUB_REMOTE) v$(VERSION)
 	@echo "Pushed tag v$(VERSION). GitHub Actions release workflow should now run."

@@ -34,20 +34,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Sync checksums.txt back to main
-        run: |
-          cp dist/checksums.txt checksums.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add checksums.txt
-          # `git diff --quiet` does not look at the index alone; use
-          # `git diff --cached --quiet` so this works on first release
-          # (when checksums.txt is being introduced as a new tracked file).
-          if ! git diff --cached --quiet -- checksums.txt; then
-            git commit -m "chore: update checksums.txt for ${GITHUB_REF_NAME}"
-            git push origin HEAD:main
-          fi
-
       - name: Sync package.json version to tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"

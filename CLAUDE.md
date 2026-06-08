@@ -105,6 +105,23 @@ QA 从 rc 切回 stable：
 | D-1 | QA 通过 | — |
 | D-0 | `make release VERSION=0.1.2` | `npx @model-go/cli@latest install`；QA 清理重装回 stable |
 
+## 发布流程细节
+
+`make release VERSION=x.y.z` 完整步骤：
+
+1. **本地 goreleaser snapshot** — 生成二进制产物和 `dist/checksums.txt`（不发布 GitHub Release）。
+2. **同步 checksums.txt** — `cp dist/checksums.txt checksums.txt`，如有变更则 commit 到 main。
+3. **Push main** — 确保 main 分支包含最新 checksums。
+4. **打 tag + push tag** — 触发 CI `release.yml` 正式构建、发布 GitHub Release、`npm publish`。
+
+CI（`release.yml`）只负责：
+- GoReleaser 正式构建 + 发布 GitHub Release
+- `npm publish`
+
+前置依赖：
+- 本机安装 [GoReleaser](https://goreleaser.com/install/)（`brew install goreleaser`）。
+- GoReleaser 使用 `--snapshot` 模式，**不需要** GitHub Token，不会发布 Release。
+
 ## 发布前置条件（一次性配置）
 
 - npm Org `model-go`（Free 计划即可）。
@@ -129,8 +146,8 @@ QA 从 rc 切回 stable：
 | `make uninstall-local` | 清理全局 `@model-go/cli` |
 | `make test` | `go test -race ./...` + `npm test` + `npm run lint:skills` |
 | `make push` / `make push-tags` | push main / 所有 tag 到 GitHub |
-| `make release VERSION=x.y.z` | 稳定版：tag `vx.y.z` → CI 走 `@latest` |
-| `make release VERSION=x.y.z-rc.N` | 内测版：tag `vx.y.z-rc.N` → CI 走 `@rc` |
+| `make release VERSION=x.y.z` | 本地生成 checksums → commit → push main → 打 stable tag → CI 走 `@latest` |
+| `make release VERSION=x.y.z-rc.N` | 内测版：本地生成 checksums → commit → push main → 打 rc tag → CI 走 `@rc` |
 | `make clean` | 清除 `bin/` `dist/` `node_modules/` |
 
 ## 扩展 Skill
