@@ -22,6 +22,18 @@ type EnvEntry struct {
 type Config struct {
 	CurrentEnv string              `json:"current_env,omitempty"`
 	Envs       map[string]EnvEntry `json:"envs,omitempty"`
+	// Payment holds the x402 pay-per-call preference + credential used by
+	// `modelgo pay`. Nil until the user runs `modelgo pay set`.
+	Payment *PaymentProfile `json:"payment,omitempty"`
+}
+
+// PaymentProfile is the stored x402 payment preference + credential. Credential
+// is the channel-specific agent credential forwarded in the X-PAYMENT payload.
+type PaymentProfile struct {
+	Method     string         `json:"method,omitempty"`  // "alipay" | "blockchain"
+	Network    string         `json:"network,omitempty"` // CAIP-2, e.g. "alipay:cnpc"
+	Scheme     string         `json:"scheme,omitempty"`  // defaults to "upto"
+	Credential map[string]any `json:"credential,omitempty"`
 }
 
 // Load reads the config file at path. A missing file returns an empty

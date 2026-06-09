@@ -15,6 +15,7 @@ import (
 	"github.com/modelgo/modelgo-cli/internal/cmd/balancecmd"
 	"github.com/modelgo/modelgo-cli/internal/cmd/envcmd"
 	"github.com/modelgo/modelgo-cli/internal/cmd/logscmd"
+	"github.com/modelgo/modelgo-cli/internal/cmd/paycmd"
 	"github.com/modelgo/modelgo-cli/internal/cmd/permissionscmd"
 	"github.com/modelgo/modelgo-cli/internal/cmd/tenantcmd"
 	"github.com/modelgo/modelgo-cli/internal/config"
@@ -62,6 +63,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return permissionscmd.Run(args[1:], stdout, stderr)
 	case "logs":
 		return logscmd.Run(args[1:], stdout, stderr)
+	case "pay":
+		return paycmd.Run(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage(stderr)
@@ -403,6 +406,7 @@ COMMANDS:
     balance               View tenant balance and transactions
     permissions           View account permissions
     logs                  Query call logs and usage statistics
+    pay                   Manage x402 pay-per-call payment profile
     hello [--name NAME]   Print a greeting
     --version, -v         Print the version
     --help, -h            Show this help`)
