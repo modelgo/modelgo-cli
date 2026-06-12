@@ -20,7 +20,6 @@ import (
 	"github.com/modelgo/modelgo-cli/internal/cmd/tenantcmd"
 	"github.com/modelgo/modelgo-cli/internal/config"
 	"github.com/modelgo/modelgo-cli/internal/env"
-	"github.com/modelgo/modelgo-cli/internal/hello"
 	"github.com/modelgo/modelgo-cli/internal/version"
 )
 
@@ -49,8 +48,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, version.Version)
 	case "--help", "-h":
 		printUsage(stdout)
-	case "hello":
-		return runHello(args[1:], stdout, stderr)
 	case "auth":
 		return runAuth(args[1:], stdout, stderr)
 	case "env":
@@ -100,17 +97,6 @@ func extractTenantFlag(args []string) (rest []string, tenant string) {
 		}
 	}
 	return args, ""
-}
-
-func runHello(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("hello", flag.ExitOnError)
-	fs.SetOutput(stderr)
-	name := fs.String("name", "world", "name to greet")
-	if err := fs.Parse(args); err != nil {
-		return 2
-	}
-	fmt.Fprintln(stdout, hello.Greet(*name))
-	return 0
 }
 
 func runAuth(args []string, stdout, stderr io.Writer) int {
@@ -407,7 +393,6 @@ COMMANDS:
     permissions           View account permissions
     logs                  Query call logs and usage statistics
     pay                   Manage x402 pay-per-call payment profile
-    hello [--name NAME]   Print a greeting
     --version, -v         Print the version
     --help, -h            Show this help`)
 }

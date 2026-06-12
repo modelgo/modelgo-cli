@@ -2,7 +2,7 @@
 
 The official CLI for modelgo. Pairs with AI agent skills (Claude Code, Codex, Gemini CLI, etc.) so AI agents can operate modelgo on your behalf.
 
-> **v0 framework stage.** The demo `hello` command and device-flow `auth` commands are available. API key, usage, and model gateway commands are not wired up yet.
+> **v0 framework stage.** Device-flow `auth` commands are available. API key, usage, and model gateway commands are not wired up yet.
 
 ## Install
 
@@ -17,9 +17,9 @@ This runs an interactive wizard that:
 
 After install, restart your AI agent (open a new chat / session) and try:
 
-> "Have modelgo say hello to me."
+> "Check my modelgo login status."
 
-Your AI should find the `modelgo-hello` skill and run `modelgo hello`.
+Your AI should find the `modelgo-shared` skill and run `modelgo auth status`.
 
 ## Direct commands
 
@@ -28,7 +28,6 @@ modelgo --version
 modelgo auth login
 modelgo auth status
 modelgo auth logout
-modelgo hello [--name NAME]
 modelgo --help
 ```
 
