@@ -39,6 +39,7 @@ Currently available commands:
 - `modelgo balance` — view tenant balance, transactions, and grant status
 - `modelgo permissions` — view account permissions and accessible menus
 - `modelgo logs` — query call logs, statistics, and usage summaries
+- `modelgo pay methods/header/request` — inspect x402 channels, build payment headers, or call model APIs through x402 pay-per-call
 
 Features not listed in `modelgo --help` are not implemented yet. If the user asks for a feature that isn't available, suggest filing an issue at https://github.com/modelgo/modelgo-cli/issues.
 

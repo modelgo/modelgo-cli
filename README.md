@@ -2,7 +2,7 @@
 
 The official CLI for modelgo. Pairs with AI agent skills (Claude Code, Codex, Gemini CLI, etc.) so AI agents can operate modelgo on your behalf.
 
-> **v0 framework stage.** Device-flow `auth` commands are available. API key, usage, and model gateway commands are not wired up yet.
+> **v0 framework stage.** Device-flow `auth` commands are available. `modelgo pay request` supports anonymous x402 pay-per-call calls to model gateway APIs; API key management is not wired up yet.
 
 ## Install
 
@@ -28,6 +28,8 @@ modelgo --version
 modelgo auth login
 modelgo auth status
 modelgo auth logout
+modelgo pay methods
+modelgo pay request --env cn --path /v1/chat/completions --method POST --data '{"model":"gpt-4o","messages":[]}' --json
 modelgo --help
 ```
 
@@ -85,6 +87,16 @@ seeing the URL before the agent starts waiting.
 > the authenticated object once approved. Parse line by line — don't
 > `JSON.parse` the whole stream. With `--no-wait`, only the device-code object
 > is printed.
+
+### x402 pay-per-call model APIs
+
+Use `modelgo pay request` when the user wants to call a model API without logging in to ModelGo first. The CLI opts into the gateway x402 path with `X-Payment-Protocol: x402`.
+
+```bash
+modelgo pay request --env cn --path /v1/chat/completions --method POST --data '{"model":"gpt-4o","messages":[{"role":"user","content":"hello"}]}' --intent "调用 gpt-4o 完成聊天补全" --json
+```
+
+In the `cn` environment, if the gateway returns a 402 that advertises `alipay:*`, the CLI writes the `PAYMENT-REQUIRED` payload to a local file and returns a structured handoff for `alipay-payment-skill`. In `intl`, the CLI does not route to Alipay; it returns the advertised x402 options for a future non-Alipay rail.
 
 ## Upgrade
 

@@ -14,14 +14,17 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // Dispatch + credential headers (must match modelgo-model-gateway pkg/x402).
 const (
-	HeaderProtocol = "X-Payment-Protocol" // marker: opt into the x402 path
-	HeaderNetwork  = "X-Payment-Network"  // optional preferred network
-	HeaderPayment  = "X-PAYMENT"          // v1 credential header
-	ProtocolValue  = "x402"
+	HeaderProtocol  = "X-Payment-Protocol" // marker: opt into the x402 path
+	HeaderNetwork   = "X-Payment-Network"  // optional preferred network
+	HeaderPayment   = "X-PAYMENT"          // v1 credential header
+	HeaderPaymentV2 = "PAYMENT-SIGNATURE"  // v2 credential header
+	HeaderRequired  = "PAYMENT-REQUIRED"   // v2 402 requirements header
+	ProtocolValue   = "x402"
 )
 
 // Requirement is one accepts[] entry from a 402 response (v1 field names).
@@ -42,17 +45,122 @@ type Required struct {
 	Accepts     []Requirement `json:"accepts"`
 }
 
+type requiredWire struct {
+	X402Version int           `json:"x402Version"`
+	Error       string        `json:"error"`
+	Resource    *resourceWire `json:"resource,omitempty"`
+	Accepts     []acceptWire  `json:"accepts"`
+}
+
+type resourceWire struct {
+	URL         string `json:"url"`
+	Description string `json:"description,omitempty"`
+	MimeType    string `json:"mimeType,omitempty"`
+}
+
+type acceptWire struct {
+	Scheme            string         `json:"scheme"`
+	Network           string         `json:"network"`
+	Asset             string         `json:"asset"`
+	MaxAmountRequired string         `json:"maxAmountRequired"`
+	Amount            string         `json:"amount"`
+	PayTo             string         `json:"payTo"`
+	Resource          string         `json:"resource,omitempty"`
+	Description       string         `json:"description,omitempty"`
+	MimeType          string         `json:"mimeType,omitempty"`
+	MaxTimeoutSeconds int            `json:"maxTimeoutSeconds,omitempty"`
+	Extra             map[string]any `json:"extra,omitempty"`
+}
+
 // ParsePaymentRequired decodes a 402 response body into its payment
 // requirements. Returns an error if the body is not a recognizable x402 402.
 func ParsePaymentRequired(body []byte) (*Required, error) {
-	var r Required
-	if err := json.Unmarshal(body, &r); err != nil {
+	var w requiredWire
+	if err := json.Unmarshal(body, &w); err != nil {
 		return nil, fmt.Errorf("payment: parse 402 body: %w", err)
+	}
+	r := Required{
+		X402Version: w.X402Version,
+		Error:       w.Error,
+		Accepts:     make([]Requirement, 0, len(w.Accepts)),
+	}
+	for _, a := range w.Accepts {
+		amount := a.MaxAmountRequired
+		if amount == "" {
+			amount = a.Amount
+		}
+		resource := a.Resource
+		description := a.Description
+		mimeType := a.MimeType
+		if w.Resource != nil {
+			if resource == "" {
+				resource = w.Resource.URL
+			}
+			if description == "" {
+				description = w.Resource.Description
+			}
+			if mimeType == "" {
+				mimeType = w.Resource.MimeType
+			}
+		}
+		r.Accepts = append(r.Accepts, Requirement{
+			Scheme:            a.Scheme,
+			Network:           a.Network,
+			Asset:             a.Asset,
+			MaxAmountRequired: amount,
+			PayTo:             a.PayTo,
+			Resource:          resource,
+			Description:       description,
+		})
 	}
 	if r.X402Version == 0 || len(r.Accepts) == 0 {
 		return nil, fmt.Errorf("payment: response is not a valid x402 402 (version=%d, accepts=%d)", r.X402Version, len(r.Accepts))
 	}
 	return &r, nil
+}
+
+// ParsePaymentRequiredResponse decodes a gateway 402 response. v2 responses
+// carry the base64-encoded requirements in PAYMENT-REQUIRED; v1 responses only
+// carry the JSON body, so the returned raw header is synthesized from that body
+// for payment tools that expect a requirements file.
+func ParsePaymentRequiredResponse(body []byte, paymentRequiredHeader string) (*Required, string, error) {
+	rawHeader := strings.TrimSpace(paymentRequiredHeader)
+	parseBody := body
+	if rawHeader != "" {
+		decoded, err := base64.StdEncoding.DecodeString(rawHeader)
+		if err != nil {
+			return nil, "", fmt.Errorf("payment: decode %s: %w", HeaderRequired, err)
+		}
+		parseBody = decoded
+	} else {
+		rawHeader = base64.StdEncoding.EncodeToString(body)
+	}
+	r, err := ParsePaymentRequired(parseBody)
+	if err != nil {
+		return nil, "", err
+	}
+	return r, rawHeader, nil
+}
+
+// SelectAlipayRequirement returns the first Alipay/CNY requirement advertised by
+// the gateway. It intentionally does not look at env; env gating is handled by
+// ShouldUseAlipaySkill so future non-CN Alipay-like rails do not auto-trigger.
+func SelectAlipayRequirement(r *Required) (Requirement, bool) {
+	if r == nil {
+		return Requirement{}, false
+	}
+	for _, a := range r.Accepts {
+		if strings.HasPrefix(strings.ToLower(a.Network), "alipay:") {
+			return a, true
+		}
+	}
+	return Requirement{}, false
+}
+
+// ShouldUseAlipaySkill gates domestic Alipay handoff. The international x402
+// path is deliberately left for blockchain facilitators.
+func ShouldUseAlipaySkill(envName string, r Requirement) bool {
+	return envName == "cn" && strings.HasPrefix(strings.ToLower(r.Network), "alipay:")
 }
 
 // Profile is the stored payment preference + credential (persisted in the CLI
