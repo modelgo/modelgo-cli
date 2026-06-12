@@ -22,6 +22,10 @@ type EnvEntry struct {
 type Config struct {
 	CurrentEnv string              `json:"current_env,omitempty"`
 	Envs       map[string]EnvEntry `json:"envs,omitempty"`
+	// AnonymousID is a local, non-login identifier used by x402 requests before
+	// a payer identity exists. It lets the gateway correlate first-leg 402s
+	// without requiring a ModelGo login.
+	AnonymousID string `json:"anonymous_id,omitempty"`
 	// Payment holds the x402 pay-per-call preference + credential used by
 	// `modelgo pay`. Nil until the user runs `modelgo pay set`.
 	Payment *PaymentProfile `json:"payment,omitempty"`
