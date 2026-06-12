@@ -30,7 +30,6 @@ modelgo --version
 
 Currently available commands:
 
-- `modelgo hello [--name NAME]` — print a greeting (demo command, used by the `modelgo-hello` skill)
 - `modelgo auth login [--env NAME] [--scope SCOPE]` — log in with ModelGo device authorization
 - `modelgo auth login --no-wait --json` — get a verification URL and device code without blocking
 - `modelgo auth login --device-code CODE` — resume polling after the user approves the URL from a prior `--no-wait` run
