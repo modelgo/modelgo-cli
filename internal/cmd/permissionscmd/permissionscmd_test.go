@@ -61,7 +61,7 @@ func TestRun(t *testing.T) {
 	cfgPath, storePath := setupTestEnv(t, srv.URL)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--config", cfgPath, "--store", storePath}, &stdout, &stderr)
+	code := Run([]string{"--config", cfgPath, "--store", storePath}, "", &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
 	}
@@ -92,7 +92,7 @@ func TestRun_JSON(t *testing.T) {
 	cfgPath, storePath := setupTestEnv(t, srv.URL)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--json", "--config", cfgPath, "--store", storePath}, &stdout, &stderr)
+	code := Run([]string{"--json", "--config", cfgPath, "--store", storePath}, "", &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
 	}

@@ -2,7 +2,7 @@ GITHUB_URL := git@github.com:modelgo/modelgo-cli.git
 GITHUB_REMOTE := github
 BRANCH := main
 
-.PHONY: help github-remote push push-tags release test build clean install-local uninstall-local
+.PHONY: help github-remote push push-tags release test build skills clean install-local uninstall-local
 
 help:
 	@echo "modelgo-cli — common dev targets"
@@ -12,6 +12,7 @@ help:
 	@echo "  make release VERSION=0.1.0 Bump checksums → commit → push main → tag → triggers release"
 	@echo "  make test                  go test + npm test + lint:skills"
 	@echo "  make build                 Build local Go binary into bin/"
+	@echo "  make skills                Regenerate skill reference + sync skill versions"
 	@echo "  make install-local         Build, pack, install locally (npm + binary + skills)"
 	@echo "  make uninstall-local       Remove global @model-go/cli"
 	@echo "  make clean                 Remove bin/ dist/ node_modules/"
@@ -30,11 +31,18 @@ push-tags: github-remote
 
 release: github-remote
 	@if [ -z "$(VERSION)" ]; then echo "Usage: make release VERSION=0.1.0"; exit 1; fi
+	@git diff --quiet && git diff --cached --quiet || { echo "working tree/index not clean; commit or stash unrelated changes first"; exit 1; }
+	@echo "Bumping package.json + skill assets to v$(VERSION)..."
+	npm version $(VERSION) --no-git-tag-version --allow-same-version
+	$(MAKE) skills
+	npm run lint:skills
+	git add package.json package-lock.json skills
 	@echo "Generating checksums for v$(VERSION)..."
 	goreleaser release --snapshot --clean
 	cp dist/checksums.txt checksums.txt
 	git add checksums.txt
-	git diff --cached --quiet -- checksums.txt || git commit -m "chore: update checksums.txt for v$(VERSION)"
+	git diff --cached --quiet -- package.json package-lock.json skills checksums.txt || \
+		git commit -m "chore: release v$(VERSION) (package.json, lock, skills, checksums)" -- package.json package-lock.json skills checksums.txt
 	git push $(GITHUB_REMOTE) $(BRANCH)
 	git tag v$(VERSION)
 	git push $(GITHUB_REMOTE) v$(VERSION)
@@ -44,6 +52,12 @@ test:
 	go test -race ./...
 	npm test
 	npm run lint:skills
+
+# Regenerate the per-skill reference/ docs from the built binary's --help, then
+# sync every SKILL.md version: from package.json. Run before committing skill or
+# command changes (and automatically as part of `make release`).
+skills: build
+	npm run sync:skill-assets
 
 build:
 	mkdir -p bin

@@ -16,7 +16,7 @@ import (
 
 // Run dispatches the `permissions` command. args is everything after `modelgo
 // permissions`. Returns the process exit code.
-func Run(args []string, stdout, stderr io.Writer) int {
+func Run(args []string, tenant string, stdout, stderr io.Writer) int {
 	// Handle --help before flag parsing so we get a custom usage message.
 	for _, arg := range args {
 		if arg == "--help" || arg == "-h" {
@@ -42,7 +42,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		opts = append(opts, apiclient.WithStorePath(*storePath))
 	}
 
-	client, err := apiclient.NewFromConfig("", opts...)
+	client, err := apiclient.NewFromConfig(tenant, opts...)
 	if err != nil {
 		fmt.Fprintf(stderr, "permissions: %v\n", err)
 		return 1
@@ -64,11 +64,11 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	tenant := client.TenantSlug
-	if tenant == "" {
-		tenant = client.TenantID
+	displayTenant := client.TenantSlug
+	if displayTenant == "" {
+		displayTenant = client.TenantID
 	}
-	fmt.Fprintf(stdout, "Permissions (tenant: %s)\n", tenant)
+	fmt.Fprintf(stdout, "Permissions (tenant: %s)\n", displayTenant)
 
 	// Granted
 	fmt.Fprintln(stdout)

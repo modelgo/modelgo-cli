@@ -8,11 +8,15 @@ import { parse as parseYaml } from "yaml";
 
 const REQUIRED = ["name", "description", "version"];
 const SKILLS_DIR = path.join(process.cwd(), "skills");
+const PKG_PATH = path.join(process.cwd(), "package.json");
 
 if (!fs.existsSync(SKILLS_DIR)) {
   console.error(`skills/ directory not found at ${SKILLS_DIR}`);
   process.exit(1);
 }
+
+// Single source of truth for the skill version (see scripts/sync-skill-version.mjs).
+const PKG_VERSION = JSON.parse(fs.readFileSync(PKG_PATH, "utf8")).version;
 
 let errors = 0;
 
@@ -27,8 +31,9 @@ function lintSkill(dirName) {
     return;
   }
 
+  const before = errors; // snapshot the global counter so [name] OK reflects THIS skill only
   const content = fs.readFileSync(mdPath, "utf8");
-  const match = content.match(/^---\n([\s\S]+?)\n---/);
+  const match = content.match(/^---\r?\n([\s\S]+?)\r?\n---/);
   if (!match) {
     console.error(`[${dirName}] missing YAML frontmatter`);
     errors++;
@@ -61,7 +66,15 @@ function lintSkill(dirName) {
     errors++;
   }
 
-  if (errors === 0) {
+  // Skill version must track package.json. Run `npm run sync:skills` to fix.
+  if (fm.version && String(fm.version) !== String(PKG_VERSION)) {
+    console.error(
+      `[${dirName}] version "${fm.version}" != package.json "${PKG_VERSION}" — run \`npm run sync:skills\``,
+    );
+    errors++;
+  }
+
+  if (errors === before) {
     console.log(`[${dirName}] OK`);
   }
 }

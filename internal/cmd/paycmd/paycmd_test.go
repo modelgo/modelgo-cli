@@ -9,7 +9,40 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/modelgo/modelgo-cli/internal/config"
 )
+
+// `pay set` reads the credential from MODELGO_PAYMENT_TOKEN when --token is
+// omitted, so an agent can supply it without exposing it in argv.
+func TestSetUsesEnvToken(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv(envPaymentToken, "agent-tok-xyz")
+
+	var stdout, stderr strings.Builder
+	if code := runSet(nil, &stdout, &stderr); code != 0 {
+		t.Fatalf("runSet code = %d, stderr = %s", code, stderr.String())
+	}
+
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Payment == nil || cfg.Payment.Credential["credentialToken"] != "agent-tok-xyz" {
+		t.Fatalf("token not stored from env: %+v", cfg.Payment)
+	}
+}
+
+// With neither --token nor the env var, `pay set` is a usage error (exit 2).
+func TestSetNoTokenErrors(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv(envPaymentToken, "")
+
+	var stdout, stderr strings.Builder
+	if code := runSet(nil, &stdout, &stderr); code != 2 {
+		t.Fatalf("runSet code = %d, want 2; stderr = %s", code, stderr.String())
+	}
+}
 
 func TestRequestCNAlipay402WritesHandoff(t *testing.T) {
 	t.Parallel()

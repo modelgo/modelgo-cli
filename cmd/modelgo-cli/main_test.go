@@ -220,6 +220,21 @@ func TestUsageMentionsAuthAndEnv(t *testing.T) {
 	}
 }
 
+// A global --tenant override only applies to the tenant-scoped business
+// commands; using it elsewhere is rejected (exit 2) rather than silently ignored.
+func TestGlobalTenantRejectedForUnsupportedCommand(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--tenant", "acme", "auth", "status"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (--tenant unsupported for auth); stderr: %s", code, stderr.String())
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte("--tenant is only supported")) {
+		t.Errorf("expected guard message, got: %s", stderr.String())
+	}
+}
+
 func TestAuthLoginHelpMentionsBlockingAndSplitFlow(t *testing.T) {
 	t.Parallel()
 

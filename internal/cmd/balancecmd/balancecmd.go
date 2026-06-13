@@ -17,16 +17,17 @@ import (
 
 // Run dispatches a `balance` subcommand. args is everything after `modelgo
 // balance`. Returns the process exit code.
-func Run(args []string, stdout, stderr io.Writer) int {
+func Run(args []string, tenant string, stdout, stderr io.Writer) int {
 	if len(args) < 1 {
-		printUsage(stderr)
-		return 2
+		// No subcommand: show the balance overview (mirrors `logs` → list).
+		// The binary's own usage text advertises bare `balance` as the overview.
+		return runOverview(args, tenant, stdout, stderr)
 	}
 	switch args[0] {
 	case "transactions":
-		return runTransactions(args[1:], stdout, stderr)
+		return runTransactions(args[1:], tenant, stdout, stderr)
 	case "grant":
-		return runGrant(args[1:], stdout, stderr)
+		return runGrant(args[1:], tenant, stdout, stderr)
 	case "--help", "-h":
 		printUsage(stdout)
 		return 0
@@ -34,7 +35,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		// Unknown token — if it looks like a flag, treat as the default
 		// (overview) subcommand with flags. Otherwise report unknown.
 		if strings.HasPrefix(args[0], "-") {
-			return runOverview(args, stdout, stderr)
+			return runOverview(args, tenant, stdout, stderr)
 		}
 		fmt.Fprintf(stderr, "unknown balance command: %s\n\n", args[0])
 		printUsage(stderr)
@@ -56,7 +57,7 @@ type balanceResponse struct {
 	UpdatedAt           time.Time `json:"updated_at"`
 }
 
-func runOverview(args []string, stdout, stderr io.Writer) int {
+func runOverview(args []string, tenant string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("balance", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "write structured JSON output")
@@ -67,7 +68,7 @@ func runOverview(args []string, stdout, stderr io.Writer) int {
 	}
 
 	opts := buildOpts(*configPath, *storePath)
-	client, err := apiclient.NewFromConfig("", opts...)
+	client, err := apiclient.NewFromConfig(tenant, opts...)
 	if err != nil {
 		fmt.Fprintf(stderr, "balance: %v\n", err)
 		return 1
@@ -90,12 +91,12 @@ func runOverview(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	tenant := client.TenantSlug
-	if tenant == "" {
-		tenant = client.TenantID
+	displayTenant := client.TenantSlug
+	if displayTenant == "" {
+		displayTenant = client.TenantID
 	}
 	symbol := currencySymbol(resp.Currency)
-	fmt.Fprintf(stdout, "Balance (tenant: %s)\n", tenant)
+	fmt.Fprintf(stdout, "Balance (tenant: %s)\n", displayTenant)
 	fmt.Fprintf(stdout, "  Available:    %s %s\n", symbol, formatAmount(resp.Balance, resp.Currency))
 	fmt.Fprintf(stdout, "  Frozen:       %s %s\n", symbol, formatAmount(resp.FrozenBalance, resp.Currency))
 	fmt.Fprintf(stdout, "  Currency:     %s\n", resp.Currency)
@@ -122,7 +123,7 @@ type transaction struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-func runTransactions(args []string, stdout, stderr io.Writer) int {
+func runTransactions(args []string, tenant string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("balance transactions", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "write structured JSON output")
@@ -136,7 +137,7 @@ func runTransactions(args []string, stdout, stderr io.Writer) int {
 	}
 
 	opts := buildOpts(*configPath, *storePath)
-	client, err := apiclient.NewFromConfig("", opts...)
+	client, err := apiclient.NewFromConfig(tenant, opts...)
 	if err != nil {
 		fmt.Fprintf(stderr, "balance transactions: %v\n", err)
 		return 1
@@ -206,7 +207,7 @@ type grantStatusResponse struct {
 	Depleted         bool    `json:"depleted"`
 }
 
-func runGrant(args []string, stdout, stderr io.Writer) int {
+func runGrant(args []string, tenant string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("balance grant", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "write structured JSON output")
@@ -217,7 +218,7 @@ func runGrant(args []string, stdout, stderr io.Writer) int {
 	}
 
 	opts := buildOpts(*configPath, *storePath)
-	client, err := apiclient.NewFromConfig("", opts...)
+	client, err := apiclient.NewFromConfig(tenant, opts...)
 	if err != nil {
 		fmt.Fprintf(stderr, "balance grant: %v\n", err)
 		return 1
@@ -240,11 +241,11 @@ func runGrant(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	tenant := client.TenantSlug
-	if tenant == "" {
-		tenant = client.TenantID
+	displayTenant := client.TenantSlug
+	if displayTenant == "" {
+		displayTenant = client.TenantID
 	}
-	fmt.Fprintf(stdout, "Grant Status (tenant: %s)\n", tenant)
+	fmt.Fprintf(stdout, "Grant Status (tenant: %s)\n", displayTenant)
 	fmt.Fprintf(stdout, "  Initial Grant:  %.2f\n", resp.InitialGrant)
 	fmt.Fprintf(stdout, "  Remaining:      %.0f%%\n", resp.PercentRemaining)
 	depleted := "no"

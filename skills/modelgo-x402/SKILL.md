@@ -1,6 +1,6 @@
 ---
 name: modelgo-x402
-version: 0.1.0
+version: 0.1.2
 description: "Call ModelGo model APIs through x402 pay-per-call. Use when the user wants anonymous paid model API access, x402, pay-per-call, Alipay AI payment, or modelgo-model-gateway without logging in. Triggers: x402, 支付调用模型, 匿名调用模型, 支付宝AI付, pay-per-call, 402 Payment Required."
 metadata:
   requires:
@@ -14,6 +14,36 @@ metadata:
 # modelgo x402 pay-per-call
 
 Use this skill when the user wants to call ModelGo model APIs through x402 without a ModelGo login. The CLI sends `X-Payment-Protocol: x402` and handles the first 402 response.
+
+> **Setup & version check:** install and the skill/CLI version-check protocol
+> live in the `modelgo-shared` skill. Align versions there first.
+
+## Command reference (authoritative)
+
+Per-command flags, usage, and examples are auto-generated from the CLI's own
+`--help`:
+
+- [`reference/index.md`](reference/index.md) — index + global conventions + exit codes
+- [`reference/pay.md`](reference/pay.md) — `pay methods/set/status/header/request`
+
+Don't guess flags — read the reference file or run `modelgo pay --help`.
+
+## Provisioning a stored payment credential (`pay set`)
+
+`modelgo pay request` (below) is the primary flow — it triggers a 402 and hands
+off to the `alipay-payment-skill`, which drives the actual Alipay payment. Use
+`modelgo pay set` only when you already hold an **agent payment token** (issued
+by the Alipay AI-Collect authorization) and want to store it for header-based
+retries:
+
+```bash
+modelgo pay set --token <agent_token>           # or:
+MODELGO_PAYMENT_TOKEN=<agent_token> modelgo pay set   # keeps it out of shell history
+```
+
+Prefer the env var when an agent supplies the token, so it never lands in argv.
+There is no in-CLI flow yet to *mint* the token from Alipay — obtain it via the
+`alipay-payment-skill` (the `pay request` 402 handoff) or out-of-band.
 
 ## Domestic vs International
 

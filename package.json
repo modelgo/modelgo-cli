@@ -8,7 +8,10 @@
   "scripts": {
     "postinstall": "node scripts/install.js",
     "test": "node --test scripts/__tests__/*.test.mjs",
-    "lint:skills": "node scripts/lint-skills.mjs"
+    "lint:skills": "node scripts/lint-skills.mjs",
+    "sync:skills": "node scripts/sync-skill-version.mjs",
+    "generate:reference": "node scripts/generate-reference.mjs",
+    "sync:skill-assets": "node scripts/generate-reference.mjs && node scripts/sync-skill-version.mjs"
   },
   "files": [
     "scripts/install.js",

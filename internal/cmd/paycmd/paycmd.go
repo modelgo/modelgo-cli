@@ -1,9 +1,10 @@
 // Package paycmd implements `modelgo pay`: manage the x402 (pay-per-call)
 // payment profile the CLI / an AI agent uses to satisfy a gateway 402.
 //
-// Scope: profile + credential management and header construction. Acquiring a
-// real Alipay AI-Collect credential (and a `modelgo chat` command that triggers
-// a 402 and auto-retries) are TODOs — see runSet.
+// Scope: profile + credential management and header construction. The agent
+// credential can be supplied via --token or the MODELGO_PAYMENT_TOKEN env var;
+// minting it in-CLI from the Alipay AI-Collect authorize flow (and a `modelgo
+// chat` command that triggers a 402 and auto-retries) are TODOs — see runSet.
 package paycmd
 
 import (
@@ -26,6 +27,10 @@ import (
 	clienv "github.com/modelgo/modelgo-cli/internal/env"
 	"github.com/modelgo/modelgo-cli/internal/payment"
 )
+
+// envPaymentToken lets agents / CI supply the `pay set` credential without
+// exposing it in argv or shell history.
+const envPaymentToken = "MODELGO_PAYMENT_TOKEN"
 
 // Run dispatches a `pay` subcommand. Returns the process exit code.
 func Run(args []string, stdout, stderr io.Writer) int {
@@ -62,6 +67,7 @@ Manage the x402 (pay-per-call) payment profile used to satisfy a gateway 402.
 Subcommands:
   methods            List the payment channels the gateway can advertise.
   set                Store a payment profile (network/scheme/credential).
+                     Credential via --token or the MODELGO_PAYMENT_TOKEN env var.
   status             Show the stored payment profile (credential redacted).
   header             Print the X-Payment-Protocol + X-PAYMENT headers to attach
                      to a request (for an agent / manual retry).
@@ -109,16 +115,23 @@ func runSet(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&method, "method", "alipay", "payment method: alipay | blockchain")
 	fs.StringVar(&network, "network", "alipay:cnpc", "CAIP-2 network")
 	fs.StringVar(&scheme, "scheme", "upto", "x402 scheme")
-	fs.StringVar(&token, "token", "", "agent payment credential token")
+	fs.StringVar(&token, "token", "", "agent payment credential token (or set MODELGO_PAYMENT_TOKEN)")
 	fs.StringVar(&payerRef, "payer", "", "optional payer reference")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if token == "" {
-		// TODO(x402-alipay): acquire the credential interactively (open the
-		// Alipay AI-Collect checkout / authorize flow) instead of requiring a
-		// pre-obtained --token. For now the token must be supplied.
-		fmt.Fprintln(stderr, "error: --token is required (interactive Alipay acquisition is not yet implemented)")
+		// Fall back to the env var so the secret need not appear in argv.
+		token = strings.TrimSpace(os.Getenv(envPaymentToken))
+	}
+	if token == "" {
+		fmt.Fprintln(stderr, "error: no payment credential provided.")
+		fmt.Fprintf(stderr, "Pass --token <agent_token>, or set %s to keep it out of shell history.\n", envPaymentToken)
+		fmt.Fprintln(stderr, "The agent token is issued by the Alipay AI-Collect authorization. For one-off pay-per-call,")
+		fmt.Fprintln(stderr, "prefer `modelgo pay request` — it triggers the gateway 402 and hands off to the alipay-payment-skill.")
+		// TODO(x402-alipay): drive the Alipay AI-Collect authorize flow in-CLI to
+		// mint the token directly (needs the provider authorize API), so users do
+		// not have to obtain it out-of-band.
 		return 2
 	}
 	cred := map[string]any{"credentialToken": token}

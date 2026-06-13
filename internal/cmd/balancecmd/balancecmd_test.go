@@ -61,7 +61,7 @@ func TestRunOverview(t *testing.T) {
 	cfgPath, storePath := setupTestEnv(t, srv.URL)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--config", cfgPath, "--store", storePath}, &stdout, &stderr)
+	code := Run([]string{"--config", cfgPath, "--store", storePath}, "", &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
 	}
@@ -90,7 +90,7 @@ func TestRunOverview_JSON(t *testing.T) {
 	cfgPath, storePath := setupTestEnv(t, srv.URL)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--json", "--config", cfgPath, "--store", storePath}, &stdout, &stderr)
+	code := Run([]string{"--json", "--config", cfgPath, "--store", storePath}, "", &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
 	}
@@ -101,6 +101,50 @@ func TestRunOverview_JSON(t *testing.T) {
 	}
 	if result.Currency != "USD" {
 		t.Errorf("Currency = %q, want USD", result.Currency)
+	}
+}
+
+// A global --tenant override (slug or id) selects that tenant's credential
+// instead of the active one, resolving the slug to its tenant id.
+func TestRunOverview_TenantOverride(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// "acme" must resolve to ten_test123 (the stored credential's id).
+		if r.URL.Path != "/open/v1/tenants/ten_test123/balance" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"code": 0, "msg": "ok",
+			"data": map[string]any{"tenant_id": "ten_test123", "balance": 1.0, "currency": "CNY"},
+		})
+	}))
+	defer srv.Close()
+
+	cfgPath, storePath := setupTestEnv(t, srv.URL)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"--config", cfgPath, "--store", storePath}, "acme", &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
+	}
+}
+
+// An unknown --tenant must fail loudly (exit 1) rather than silently falling
+// back to the active tenant.
+func TestRunOverview_UnknownTenant(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("server must not be called for an unresolvable tenant: %s", r.URL.Path)
+	}))
+	defer srv.Close()
+
+	cfgPath, storePath := setupTestEnv(t, srv.URL)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"--config", cfgPath, "--store", storePath}, "ghost", &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (unknown tenant); stderr: %s", code, stderr.String())
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte("ghost")) {
+		t.Errorf("expected error to mention the unknown tenant, got: %s", stderr.String())
 	}
 }
 
@@ -121,7 +165,7 @@ func TestRunTransactions(t *testing.T) {
 	cfgPath, storePath := setupTestEnv(t, srv.URL)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"transactions", "--type", "consumption", "--config", cfgPath, "--store", storePath}, &stdout, &stderr)
+	code := Run([]string{"transactions", "--type", "consumption", "--config", cfgPath, "--store", storePath}, "", &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
 	}
@@ -147,7 +191,7 @@ func TestRunGrant(t *testing.T) {
 	cfgPath, storePath := setupTestEnv(t, srv.URL)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"grant", "--config", cfgPath, "--store", storePath}, &stdout, &stderr)
+	code := Run([]string{"grant", "--config", cfgPath, "--store", storePath}, "", &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
 	}

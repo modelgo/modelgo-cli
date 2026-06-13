@@ -142,16 +142,20 @@ CI（`release.yml`）只负责：
 | 命令 | 作用 |
 |-|-|
 | `make build` | 编译本地 Go 二进制到 `bin/modelgo` |
+| `make skills` | build → 生成各 skill 的 `reference/`（scrape `--help`）→ 从 `package.json` 同步 SKILL.md 版本 |
 | `make install-local` | 一键本地安装：build → pack → npm install → 拷贝 binary → 安装 skills |
 | `make uninstall-local` | 清理全局 `@model-go/cli` |
-| `make test` | `go test -race ./...` + `npm test` + `npm run lint:skills` |
+| `make test` | `go test -race ./...` + `npm test` + `npm run lint:skills`（含版本一致性校验） |
 | `make push` / `make push-tags` | push main / 所有 tag 到 GitHub |
-| `make release VERSION=x.y.z` | 本地生成 checksums → commit → push main → 打 stable tag → CI 走 `@latest` |
-| `make release VERSION=x.y.z-rc.N` | 内测版：本地生成 checksums → commit → push main → 打 rc tag → CI 走 `@rc` |
+| `make release VERSION=x.y.z` | bump package.json + 重新生成 skill 资产 → 本地生成 checksums → commit → push main → 打 stable tag → CI 走 `@latest` |
+| `make release VERSION=x.y.z-rc.N` | 内测版：同上，打 rc tag → CI 走 `@rc` |
 | `make clean` | 清除 `bin/` `dist/` `node_modules/` |
+
+> **Skill 版本真源 = `package.json` 的 `version`**（npm 发布版 = git tag = `npx skills add` 分发版）。三个 SKILL.md 的 `version:` 由 `npm run sync:skills` 自动写入，**不要手改**；`npm run lint:skills` 会在脱节时报错。`reference/` 由 `npm run generate:reference` 从二进制 `--help` 生成，标了 "Do not edit by hand"。
 
 ## 扩展 Skill
 
-1. 加 `skills/modelgo-<name>/SKILL.md`，frontmatter `name` 必须与目录名一致、`description` 单行。
-2. `npm run lint:skills` 本地校验。
-3. 发版同代码：先 `make release VERSION=x.y.z-rc.N` 给 QA 验触发效果，通过后发 stable。已安装用户再跑 `npx @model-go/cli@latest install`，wizard 自动 sync 新 skill。
+1. 加 `skills/modelgo-<name>/SKILL.md`，frontmatter `name` 必须与目录名一致、`description` 单行；`version:` 随便填（会被同步覆盖）。
+2. 若新 skill 含命令：在 `scripts/generate-reference.mjs` 的 `PAGES` 里登记命令组归属，跑 `make skills` 生成 `reference/`。
+3. `make skills` 同步版本 + 生成 reference；`npm run lint:skills` 校验（name/description/version 一致性）。复杂用法/故障协议放 `assets/`，SKILL.md 只留触发词 + 路由 + 指针（参考 `modelgo-shared`）。
+4. 发版同代码：先 `make release VERSION=x.y.z-rc.N` 给 QA 验触发效果（release 会自动 bump 版本 + 重新生成 skill 资产并提交），通过后发 stable。已安装用户再跑 `npx @model-go/cli@latest install`，wizard 自动 sync 新 skill。
