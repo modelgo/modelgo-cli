@@ -44,14 +44,17 @@ func TestRun(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(map[string]any{
 			"code": 0, "msg": "ok",
-			"data": map[string]any{
-				"granted": []string{"dashboard:view", "models:view", "billing:view"},
+			"data": map[string]any{ // flat menus with name/visible/actions; plus context fields
+				"active_tenant_id":   "ten_test123",
+				"active_tenant_type": "personal",
+				"region":             "domestic",
+				"tenant_role":        "tenant_owner",
+				"workspace_role":     "ws_owner",
+				"granted":            []string{"dashboard:view", "models:view", "billing:view"},
 				"menus": []map[string]any{
-					{"key": "dashboard", "label": "Dashboard", "children": []any{}},
-					{"key": "analytics", "label": "Analytics", "children": []map[string]any{
-						{"key": "analytics-overview", "label": "Overview", "children": []any{}},
-						{"key": "analytics-logs", "label": "Logs", "children": []any{}},
-					}},
+					{"key": "dashboard", "name": "Dashboard", "scope": "tenant", "visible": true, "actions": map[string]bool{"view": true}},
+					{"key": "analytics", "name": "Analytics", "scope": "tenant", "visible": true, "actions": map[string]bool{"view": true}},
+					{"key": "hidden", "name": "Hidden", "scope": "tenant", "visible": false, "actions": map[string]bool{}},
 				},
 			},
 		})
@@ -70,10 +73,13 @@ func TestRun(t *testing.T) {
 		t.Errorf("expected granted permission in output, got: %s", out)
 	}
 	if !bytes.Contains([]byte(out), []byte("Analytics")) {
-		t.Errorf("expected menu label in output, got: %s", out)
+		t.Errorf("expected visible menu name in output, got: %s", out)
 	}
-	if !bytes.Contains([]byte(out), []byte("├─")) {
-		t.Errorf("expected tree connector in output, got: %s", out)
+	if bytes.Contains([]byte(out), []byte("Hidden")) {
+		t.Errorf("non-visible menu must be filtered out, got: %s", out)
+	}
+	if !bytes.Contains([]byte(out), []byte("tenant_owner")) {
+		t.Errorf("expected tenant role context in output, got: %s", out)
 	}
 }
 

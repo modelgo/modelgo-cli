@@ -69,6 +69,10 @@ func Run(args []string, tenant string, stdout, stderr io.Writer) int {
 		displayTenant = client.TenantID
 	}
 	fmt.Fprintf(stdout, "Permissions (tenant: %s)\n", displayTenant)
+	if resp.TenantRole != "" || resp.WorkspaceRole != "" || resp.Region != "" {
+		fmt.Fprintf(stdout, "  Tenant role: %s   Workspace role: %s   Region: %s\n",
+			dashIfEmpty(resp.TenantRole), dashIfEmpty(resp.WorkspaceRole), dashIfEmpty(resp.Region))
+	}
 
 	// Granted
 	fmt.Fprintln(stdout)
@@ -79,16 +83,23 @@ func Run(args []string, tenant string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "  %s\n", strings.Join(resp.Granted, "    "))
 	}
 
-	// Menus
+	// Menus: a flat list of visible entries (upstream has no nested children).
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Menus:")
-	if len(resp.Menus) == 0 {
-		fmt.Fprintln(stdout, "  (none)")
-	} else {
-		for _, m := range resp.Menus {
-			fmt.Fprintf(stdout, "  %s\n", m.Label)
-			printMenuChildren(stdout, m.Children, "    ")
+	shown := 0
+	for _, m := range resp.Menus {
+		if !m.Visible {
+			continue
 		}
+		name := m.Name
+		if name == "" {
+			name = m.Key
+		}
+		fmt.Fprintf(stdout, "  %s\n", name)
+		shown++
+	}
+	if shown == 0 {
+		fmt.Fprintln(stdout, "  (none)")
 	}
 
 	return 0
@@ -106,34 +117,33 @@ FLAGS:
     --store PATH        Credential store path (default ~/.modelgo/auth.json)`)
 }
 
-func printMenuChildren(w io.Writer, children []menuItem, prefix string) {
-	for i, child := range children {
-		connector := "├─"
-		if i == len(children)-1 {
-			connector = "└─"
-		}
-		fmt.Fprintf(w, "%s%s %s\n", prefix, connector, child.Label)
-		if len(child.Children) > 0 {
-			childPrefix := prefix
-			if i < len(children)-1 {
-				childPrefix += "│  "
-			} else {
-				childPrefix += "   "
-			}
-			printMenuChildren(w, child.Children, childPrefix)
-		}
+func dashIfEmpty(s string) string {
+	if s == "" {
+		return "-"
 	}
+	return s
 }
 
 // ── API types ───────────────────────────────────────────────────────────────
 
 type permissionsResponse struct {
-	Granted []string   `json:"granted"`
-	Menus   []menuItem `json:"menus"`
+	ActiveTenantID    string     `json:"active_tenant_id"`
+	ActiveTenantType  string     `json:"active_tenant_type"`
+	ActiveWorkspaceID string     `json:"active_workspace_id"`
+	Region            string     `json:"region"`
+	TenantRole        string     `json:"tenant_role"`
+	WorkspaceRole     string     `json:"workspace_role"`
+	Granted           []string   `json:"granted"`
+	Menus             []menuItem `json:"menus"`
 }
 
+// menuItem mirrors permissions' authz.MenuResult: a FLAT entry (no children),
+// with the human-readable name in "name" (not "label").
 type menuItem struct {
-	Key      string     `json:"key"`
-	Label    string     `json:"label"`
-	Children []menuItem `json:"children"`
+	Key            string          `json:"key"`
+	Name           string          `json:"name"`
+	Scope          string          `json:"scope"`
+	Visible        bool            `json:"visible"`
+	ViewPermission string          `json:"view_permission,omitempty"`
+	Actions        map[string]bool `json:"actions"`
 }

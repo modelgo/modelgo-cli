@@ -115,21 +115,28 @@ func runOverview(args []string, tenant string, stdout, stderr io.Writer) int {
 // ── balance transactions ────────────────────────────────────────────────────
 
 type transaction struct {
-	ID          string    `json:"id"`
-	Type        string    `json:"type"`
-	Amount      float64   `json:"amount"`
-	Currency    string    `json:"currency"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID        string            `json:"id"`
+	Type      string            `json:"type"` // reserve|settle|release|recharge|adjust|write_off|grant
+	Amount    apiclient.Decimal `json:"amount"`
+	Currency  string            `json:"currency"`
+	Reason    string            `json:"reason"` // upstream's human-readable note (there is no "description")
+	CreatedAt time.Time         `json:"created_at"`
+}
+
+// transactionsResponse is the billing list wrapper: {"items":[...],"next_cursor":""}.
+// next_cursor is the created_at of the last row; "" means no more pages.
+type transactionsResponse struct {
+	Items      []transaction `json:"items"`
+	NextCursor string        `json:"next_cursor"`
 }
 
 func runTransactions(args []string, tenant string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("balance transactions", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "write structured JSON output")
-	typeFilter := fs.String("type", "", "filter by type (consumption/recharge/refund/grant)")
-	limit := fs.Int("limit", 20, "number of results (max 100)")
-	before := fs.String("before", "", "keyset pagination cursor")
+	typeFilter := fs.String("type", "", "filter by type (reserve/settle/release/recharge/adjust/write_off/grant)")
+	limit := fs.Int("limit", 20, "number of results (max 200)")
+	cursor := fs.String("cursor", "", "keyset pagination cursor (the next_cursor from a prior page)")
 	configPath := fs.String("config", "", "config file path")
 	storePath := fs.String("store", "", "credential store path")
 	if err := fs.Parse(args); err != nil {
@@ -150,16 +157,16 @@ func runTransactions(args []string, tenant string, stdout, stderr io.Writer) int
 	if *typeFilter != "" {
 		params.Set("type", *typeFilter)
 	}
-	if *limit > 0 && *limit <= 100 {
+	if *limit > 0 && *limit <= 200 {
 		params.Set("limit", fmt.Sprintf("%d", *limit))
 	}
-	if *before != "" {
-		params.Set("before", *before)
+	if *cursor != "" {
+		params.Set("cursor", *cursor)
 	}
 
 	path := fmt.Sprintf("tenants/%s/transactions", url.PathEscape(client.TenantID))
-	var txns []transaction
-	if err := client.GetWithQuery(ctx, path, params, &txns); err != nil {
+	var resp transactionsResponse
+	if err := client.GetWithQuery(ctx, path, params, &resp); err != nil {
 		fmt.Fprintf(stderr, "balance transactions: %v\n", err)
 		return 1
 	}
@@ -167,34 +174,33 @@ func runTransactions(args []string, tenant string, stdout, stderr io.Writer) int
 	if *jsonOut {
 		enc := json.NewEncoder(stdout)
 		enc.SetEscapeHTML(false)
-		_ = enc.Encode(txns)
+		_ = enc.Encode(resp) // includes next_cursor for scripted pagination
 		return 0
 	}
 
-	if len(txns) == 0 {
+	if len(resp.Items) == 0 {
 		fmt.Fprintln(stdout, "No transactions found.")
 		return 0
 	}
 
 	fmt.Fprintf(stdout, "%-36s %-14s %12s %-8s %-30s %s\n",
-		"ID", "TYPE", "AMOUNT", "CURRENCY", "DESCRIPTION", "CREATED_AT")
-	for _, tx := range txns {
+		"ID", "TYPE", "AMOUNT", "CURRENCY", "REASON", "CREATED_AT")
+	for _, tx := range resp.Items {
 		symbol := currencySymbol(tx.Currency)
-		desc := tx.Description
-		if len(desc) > 28 {
-			desc = desc[:25] + "..."
+		reason := tx.Reason
+		if len(reason) > 28 {
+			reason = reason[:25] + "..."
 		}
 		createdAt := "-"
 		if !tx.CreatedAt.IsZero() {
 			createdAt = tx.CreatedAt.Format("2006-01-02 15:04:05")
 		}
 		fmt.Fprintf(stdout, "%-36s %-14s %s%-9.2f %-8s %-30s %s\n",
-			tx.ID, tx.Type, symbol, tx.Amount, tx.Currency, desc, createdAt)
+			tx.ID, tx.Type, symbol, tx.Amount.Float(), tx.Currency, reason, createdAt)
 	}
 
-	if len(txns) >= *limit {
-		last := txns[len(txns)-1]
-		fmt.Fprintf(stdout, "\nShowing %d results. Use --before %s for more.\n", len(txns), last.ID)
+	if resp.NextCursor != "" {
+		fmt.Fprintf(stdout, "\nShowing %d results. Use --cursor %s for more.\n", len(resp.Items), resp.NextCursor)
 	}
 	return 0
 }
@@ -202,9 +208,13 @@ func runTransactions(args []string, tenant string, stdout, stderr io.Writer) int
 // ── balance grant ───────────────────────────────────────────────────────────
 
 type grantStatusResponse struct {
-	InitialGrant     float64 `json:"initial_grant"`
-	PercentRemaining float64 `json:"percent_remaining"`
-	Depleted         bool    `json:"depleted"`
+	TenantID         string            `json:"tenant_id"`
+	Currency         string            `json:"currency"`
+	InitialGrant     apiclient.Decimal `json:"initial_grant"`   // string-encoded decimal upstream
+	CurrentBalance   apiclient.Decimal `json:"current_balance"` // string-encoded decimal upstream
+	PercentRemaining float64           `json:"percent_remaining"`
+	Granted          bool              `json:"granted"`
+	Depleted         bool              `json:"depleted"`
 }
 
 func runGrant(args []string, tenant string, stdout, stderr io.Writer) int {
@@ -246,13 +256,19 @@ func runGrant(args []string, tenant string, stdout, stderr io.Writer) int {
 		displayTenant = client.TenantID
 	}
 	fmt.Fprintf(stdout, "Grant Status (tenant: %s)\n", displayTenant)
-	fmt.Fprintf(stdout, "  Initial Grant:  %.2f\n", resp.InitialGrant)
-	fmt.Fprintf(stdout, "  Remaining:      %.0f%%\n", resp.PercentRemaining)
+	fmt.Fprintf(stdout, "  Initial Grant:   %s %s\n", resp.Currency, resp.InitialGrant)
+	fmt.Fprintf(stdout, "  Current Balance: %s %s\n", resp.Currency, resp.CurrentBalance)
+	fmt.Fprintf(stdout, "  Remaining:       %.0f%%\n", resp.PercentRemaining)
+	granted := "no"
+	if resp.Granted {
+		granted = "yes"
+	}
+	fmt.Fprintf(stdout, "  Granted:         %s\n", granted)
 	depleted := "no"
 	if resp.Depleted {
 		depleted = "yes"
 	}
-	fmt.Fprintf(stdout, "  Depleted:       %s\n", depleted)
+	fmt.Fprintf(stdout, "  Depleted:        %s\n", depleted)
 	return 0
 }
 
@@ -299,9 +315,9 @@ USAGE:
 
 FLAGS:
     --json              Write structured JSON output
-    --type TYPE         (transactions) Filter by type: consumption/recharge/refund/grant
-    --limit N           (transactions) Number of results, max 100 (default 20)
-    --before CURSOR     (transactions) Keyset pagination cursor
+    --type TYPE         (transactions) Filter by type: reserve/settle/release/recharge/adjust/write_off/grant
+    --limit N           (transactions) Number of results, max 200 (default 20)
+    --cursor CURSOR     (transactions) Keyset cursor: pass the next_cursor from a prior page
     --config PATH       Config file path (default ~/.modelgo/config.json)
     --store PATH        Credential store path (default ~/.modelgo/auth.json)`)
 }
