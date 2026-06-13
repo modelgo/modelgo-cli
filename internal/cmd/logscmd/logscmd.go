@@ -415,11 +415,11 @@ func runStats(args []string, tenant string, stdout, stderr io.Writer) int {
 	defer cancel()
 
 	params := url.Values{}
-	if *from != "" {
-		params.Set("from", *from)
+	if v := normalizeDate(*from); v != "" {
+		params.Set("from", v)
 	}
-	if *to != "" {
-		params.Set("to", *to)
+	if v := normalizeDate(*to); v != "" {
+		params.Set("to", v)
 	}
 	if *model != "" {
 		params.Set("model", *model)
@@ -523,11 +523,11 @@ func runUsage(args []string, tenant string, stdout, stderr io.Writer) int {
 	defer cancel()
 
 	params := url.Values{}
-	if *from != "" {
-		params.Set("from", *from)
+	if v := normalizeDate(*from); v != "" {
+		params.Set("from", v)
 	}
-	if *to != "" {
-		params.Set("to", *to)
+	if v := normalizeDate(*to); v != "" {
+		params.Set("to", v)
 	}
 
 	var resp usageResponse
@@ -607,6 +607,24 @@ func maskAPIKey(id string) string {
 		return "***"
 	}
 	return id[:4] + "***" + id[len(id)-4:]
+}
+
+// normalizeDate converts a user-supplied --from/--to value to the RFC3339
+// timestamp the observer endpoints validate against. A bare calendar date
+// (YYYY-MM-DD, the documented form) is widened to the start of that day in
+// UTC; an already-RFC3339 value is passed through unchanged. observer's
+// model-logs/stats rejects bare dates with `{"field":"to","message":"must be
+// RFC3339"}`, so this normalization is required for stats and harmless for the
+// (more lenient) usage/summary.
+func normalizeDate(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return ""
+	}
+	if t, err := time.Parse("2006-01-02", v); err == nil {
+		return t.UTC().Format(time.RFC3339)
+	}
+	return v
 }
 
 func expandPreset(p string) string {
