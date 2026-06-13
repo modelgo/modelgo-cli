@@ -115,13 +115,18 @@ func NewFromConfig(tenantOverride string, opts ...Option) (*Client, error) {
 	}
 	cred, err := auth.ResolveActiveOrFlag(envName, tenantOverride, storePath)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("not logged in. Run `modelgo auth login` first")
-		}
-		// auth.ResolveActiveOrFlag can also return descriptive errors for
-		// missing tenants; treat those the same way.
-		if strings.Contains(err.Error(), "not logged in") || strings.Contains(err.Error(), "no active") {
-			return nil, fmt.Errorf("not logged in. Run `modelgo auth login` first")
+		// With an explicit --tenant override, surface the specific resolution
+		// error (e.g. `tenant "x" not logged in for env "cn"`) so the user fixes
+		// the tenant rather than being told to re-authenticate.
+		if tenantOverride == "" {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil, fmt.Errorf("not logged in. Run `modelgo auth login` first")
+			}
+			// auth.ResolveActiveOrFlag can also return descriptive errors for
+			// missing tenants; treat those the same way.
+			if strings.Contains(err.Error(), "not logged in") || strings.Contains(err.Error(), "no active") {
+				return nil, fmt.Errorf("not logged in. Run `modelgo auth login` first")
+			}
 		}
 		return nil, err
 	}

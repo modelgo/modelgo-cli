@@ -31,16 +31,28 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	// Strip a leading global --tenant <slug|id> override before dispatching.
-	// It selects which logged-in tenant's credential authenticated openapi
-	// commands use, overriding the env's active pointer for that one
-	// invocation. No openapi business commands exist yet, so today this only
-	// validates and threads the value to auth.ResolveActiveOrFlag.
+	// It selects which logged-in tenant's credential authenticates the
+	// tenant-scoped business commands (balance, permissions, logs) for that one
+	// invocation, overriding the env's active tenant pointer. It is threaded to
+	// each such command's apiclient.NewFromConfig call, which resolves it via
+	// auth.ResolveActiveOrFlag (an unknown slug/id errors instead of silently
+	// falling back to the active tenant).
 	args, globalTenant := extractTenantFlag(args)
-	_ = globalTenant
 
 	if len(args) < 1 {
 		printUsage(stderr)
 		return 2
+	}
+
+	// --tenant only applies to the tenant-scoped business commands. Reject it
+	// elsewhere rather than silently ignoring it.
+	if globalTenant != "" {
+		switch args[0] {
+		case "balance", "permissions", "logs":
+		default:
+			fmt.Fprintf(stderr, "--tenant is only supported for balance, permissions, and logs (not %q)\n", args[0])
+			return 2
+		}
 	}
 
 	switch args[0] {
@@ -55,11 +67,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "tenant":
 		return tenantcmd.Run(args[1:], stdout, stderr)
 	case "balance":
-		return balancecmd.Run(args[1:], stdout, stderr)
+		return balancecmd.Run(args[1:], globalTenant, stdout, stderr)
 	case "permissions":
-		return permissionscmd.Run(args[1:], stdout, stderr)
+		return permissionscmd.Run(args[1:], globalTenant, stdout, stderr)
 	case "logs":
-		return logscmd.Run(args[1:], stdout, stderr)
+		return logscmd.Run(args[1:], globalTenant, stdout, stderr)
 	case "pay":
 		return paycmd.Run(args[1:], stdout, stderr)
 	default:
@@ -394,7 +406,11 @@ COMMANDS:
     logs                  Query call logs and usage statistics
     pay                   Manage x402 pay-per-call payment profile
     --version, -v         Print the version
-    --help, -h            Show this help`)
+    --help, -h            Show this help
+
+GLOBAL FLAGS:
+    --tenant <slug|id>    Before the subcommand: use a specific logged-in tenant
+                          for one call (balance, permissions, logs only)`)
 }
 
 func printAuthUsage(w io.Writer) {

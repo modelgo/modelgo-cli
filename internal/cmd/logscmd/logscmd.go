@@ -18,25 +18,25 @@ import (
 
 // Run dispatches a `logs` subcommand. args is everything after `modelgo logs`.
 // Returns the process exit code.
-func Run(args []string, stdout, stderr io.Writer) int {
+func Run(args []string, tenant string, stdout, stderr io.Writer) int {
 	if len(args) < 1 {
-		return runList(args, stdout, stderr)
+		return runList(args, tenant, stdout, stderr)
 	}
 	switch args[0] {
 	case "stats":
-		return runStats(args[1:], stdout, stderr)
+		return runStats(args[1:], tenant, stdout, stderr)
 	case "usage":
-		return runUsage(args[1:], stdout, stderr)
+		return runUsage(args[1:], tenant, stdout, stderr)
 	case "--help", "-h":
 		printUsage(stdout)
 		return 0
 	default:
 		// If it looks like a flag, default to list.
 		if strings.HasPrefix(args[0], "-") {
-			return runList(args, stdout, stderr)
+			return runList(args, tenant, stdout, stderr)
 		}
 		// Otherwise it's a request-id (detail) or request-id + payload.
-		return runDetailOrPayload(args, stdout, stderr)
+		return runDetailOrPayload(args, tenant, stdout, stderr)
 	}
 }
 
@@ -55,7 +55,7 @@ type modelLog struct {
 	Currency       string    `json:"currency"`
 }
 
-func runList(args []string, stdout, stderr io.Writer) int {
+func runList(args []string, tenant string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("logs", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "write structured JSON output")
@@ -72,7 +72,7 @@ func runList(args []string, stdout, stderr io.Writer) int {
 	}
 
 	opts := buildOpts(*configPath, *storePath)
-	client, err := apiclient.NewFromConfig("", opts...)
+	client, err := apiclient.NewFromConfig(tenant, opts...)
 	if err != nil {
 		fmt.Fprintf(stderr, "logs: %v\n", err)
 		return 1
@@ -184,19 +184,19 @@ type payloadResponse struct {
 	Truncated   bool   `json:"truncated"`
 }
 
-func runDetailOrPayload(args []string, stdout, stderr io.Writer) int {
+func runDetailOrPayload(args []string, tenant string, stdout, stderr io.Writer) int {
 	requestID := args[0]
 	rest := args[1:]
 
 	// Check if next token is "payload"
 	if len(rest) > 0 && rest[0] == "payload" {
-		return runPayload(requestID, rest[1:], stdout, stderr)
+		return runPayload(requestID, rest[1:], tenant, stdout, stderr)
 	}
 
-	return runDetail(requestID, rest, stdout, stderr)
+	return runDetail(requestID, rest, tenant, stdout, stderr)
 }
 
-func runDetail(requestID string, args []string, stdout, stderr io.Writer) int {
+func runDetail(requestID string, args []string, tenant string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("logs detail", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "write structured JSON output")
@@ -207,7 +207,7 @@ func runDetail(requestID string, args []string, stdout, stderr io.Writer) int {
 	}
 
 	opts := buildOpts(*configPath, *storePath)
-	client, err := apiclient.NewFromConfig("", opts...)
+	client, err := apiclient.NewFromConfig(tenant, opts...)
 	if err != nil {
 		fmt.Fprintf(stderr, "logs: %v\n", err)
 		return 1
@@ -278,7 +278,7 @@ func runDetail(requestID string, args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runPayload(requestID string, args []string, stdout, stderr io.Writer) int {
+func runPayload(requestID string, args []string, tenant string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("logs payload", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "write structured JSON output")
@@ -290,7 +290,7 @@ func runPayload(requestID string, args []string, stdout, stderr io.Writer) int {
 	}
 
 	opts := buildOpts(*configPath, *storePath)
-	client, err := apiclient.NewFromConfig("", opts...)
+	client, err := apiclient.NewFromConfig(tenant, opts...)
 	if err != nil {
 		fmt.Fprintf(stderr, "logs payload: %v\n", err)
 		return 1
@@ -366,7 +366,7 @@ type statsResponse struct {
 	Groups []statsGroup `json:"groups"`
 }
 
-func runStats(args []string, stdout, stderr io.Writer) int {
+func runStats(args []string, tenant string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("logs stats", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "write structured JSON output")
@@ -383,7 +383,7 @@ func runStats(args []string, stdout, stderr io.Writer) int {
 	}
 
 	opts := buildOpts(*configPath, *storePath)
-	client, err := apiclient.NewFromConfig("", opts...)
+	client, err := apiclient.NewFromConfig(tenant, opts...)
 	if err != nil {
 		fmt.Fprintf(stderr, "logs stats: %v\n", err)
 		return 1
@@ -469,7 +469,7 @@ type usageResponse struct {
 	Total  usageTotal `json:"total"`
 }
 
-func runUsage(args []string, stdout, stderr io.Writer) int {
+func runUsage(args []string, tenant string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("logs usage", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "write structured JSON output")
@@ -482,7 +482,7 @@ func runUsage(args []string, stdout, stderr io.Writer) int {
 	}
 
 	opts := buildOpts(*configPath, *storePath)
-	client, err := apiclient.NewFromConfig("", opts...)
+	client, err := apiclient.NewFromConfig(tenant, opts...)
 	if err != nil {
 		fmt.Fprintf(stderr, "logs usage: %v\n", err)
 		return 1

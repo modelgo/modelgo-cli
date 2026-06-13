@@ -65,7 +65,7 @@ func TestRunList(t *testing.T) {
 	cfgPath, storePath := setupTestEnv(t, srv.URL)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--config", cfgPath, "--store", storePath}, &stdout, &stderr)
+	code := Run([]string{"--config", cfgPath, "--store", storePath}, "", &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
 	}
@@ -106,7 +106,7 @@ func TestRunDetail(t *testing.T) {
 	cfgPath, storePath := setupTestEnv(t, srv.URL)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"req-abc", "--config", cfgPath, "--store", storePath}, &stdout, &stderr)
+	code := Run([]string{"req-abc", "--config", cfgPath, "--store", storePath}, "", &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
 	}
@@ -148,7 +148,7 @@ func TestRunStats(t *testing.T) {
 	cfgPath, storePath := setupTestEnv(t, srv.URL)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"stats", "--config", cfgPath, "--store", storePath}, &stdout, &stderr)
+	code := Run([]string{"stats", "--config", cfgPath, "--store", storePath}, "", &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
 	}
@@ -187,7 +187,7 @@ func TestRunUsage(t *testing.T) {
 	cfgPath, storePath := setupTestEnv(t, srv.URL)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"usage", "--config", cfgPath, "--store", storePath}, &stdout, &stderr)
+	code := Run([]string{"usage", "--config", cfgPath, "--store", storePath}, "", &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
 	}

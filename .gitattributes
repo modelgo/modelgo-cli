@@ -1,0 +1,24 @@
+# Normalize line endings so SKILL.md / scripts / Go sources are LF in the repo
+# regardless of contributor OS (the package targets darwin/linux/win32). This
+# keeps the skill frontmatter parsers (scripts/*.mjs) and the Go toolchain from
+# tripping on CRLF.
+* text=auto eol=lf
+
+# Explicit: text formats are always LF.
+*.go    text eol=lf
+*.md    text eol=lf
+*.mjs   text eol=lf
+*.js    text eol=lf
+*.json  text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.mod   text eol=lf
+*.sum   text eol=lf
+Makefile text eol=lf
+
+# Binaries / archives must never be normalized.
+*.png   binary
+*.jpg   binary
+*.gz    binary
+*.tgz   binary
+*.zip   binary

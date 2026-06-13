@@ -1,6 +1,6 @@
 ---
 name: modelgo-inspect
-version: 0.1.0
+version: 0.1.2
 description: "Inspect tenant balance, permissions, and call logs. Use when the user asks about billing, balance, quotas, permissions, access control, call history, usage, API costs, or model consumption. Triggers: 余额, 账单, 权限, 调用日志, 用量, balance, billing, permissions, call logs, usage, cost."
 metadata:
   requires:
@@ -20,6 +20,20 @@ metadata:
 # modelgo inspect — balance, permissions, and logs
 
 This skill lets users inspect their tenant's financial status, access permissions, and API call history via the `modelgo` CLI.
+
+> **Setup & version check:** install, login, env/tenant selection, and the
+> skill/CLI version-check protocol live in the `modelgo-shared` skill. Align
+> versions there before relying on the flags below.
+
+## Command reference (authoritative)
+
+Per-command flags, usage, and examples are auto-generated from the CLI's own
+`--help`:
+
+- [`reference/index.md`](reference/index.md) — index + global conventions + exit codes
+- [`reference/balance.md`](reference/balance.md), [`reference/permissions.md`](reference/permissions.md), [`reference/logs.md`](reference/logs.md)
+
+Don't guess flags — read the reference file or run `modelgo <command> --help`.
 
 ## When to use
 
@@ -65,5 +79,7 @@ modelgo logs usage --from 2026-05-01 --to 2026-06-01  # Date range
 ## Notes
 
 - All commands require login first (`modelgo auth login`).
-- Commands operate on the currently active tenant. Use the global `--tenant <slug|id>` flag to target a different tenant.
+- Commands operate on the active tenant by default. To target a different tenant for one call, use the global `--tenant <slug|id>` flag *before* the subcommand: `modelgo --tenant <slug|id> balance`. An unknown tenant errors (exit 1) instead of silently using the active one.
 - Add `--json` to any command for structured output suitable for scripting or further processing.
+- On error the CLI prints a plain-text message to stderr and exits non-zero (`1` runtime, `2` usage). `session expired` → re-login; `permission denied` → check `modelgo permissions`.
+- If a command looks like a CLI bug (crash, empty/malformed output, malformed `--json`), see `modelgo-shared/assets/issue-reporting.md` before filing an issue.
