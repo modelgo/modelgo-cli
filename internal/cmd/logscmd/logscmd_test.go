@@ -159,6 +159,51 @@ func TestRunStats(t *testing.T) {
 	}
 }
 
+// observer's model-logs/stats validates from/to as RFC3339 and 400s on a bare
+// YYYY-MM-DD. The CLI documents --from/--to as YYYY-MM-DD, so it must widen a
+// bare date to the start-of-day RFC3339 timestamp before sending. (Regression
+// for a contract bug found via live gateway e2e: bare dates → HTTP 400.)
+func TestRunStats_NormalizesBareDateToRFC3339(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("from"); got != "2026-06-06T00:00:00Z" {
+			t.Errorf("from = %q, want 2026-06-06T00:00:00Z (RFC3339)", got)
+		}
+		if got := r.URL.Query().Get("to"); got != "2026-06-14T00:00:00Z" {
+			t.Errorf("to = %q, want 2026-06-14T00:00:00Z (RFC3339)", got)
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"code": 0, "msg": "ok",
+			"data": map[string]any{
+				"totals": map[string]any{"spend": "1", "requests": 1, "tokens": 1},
+				"groups": []map[string]any{},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	cfgPath, storePath := setupTestEnv(t, srv.URL)
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"stats", "--from", "2026-06-06", "--to", "2026-06-14", "--config", cfgPath, "--store", storePath}, "", &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
+	}
+}
+
+func TestNormalizeDate(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"", ""},
+		{"2026-06-06", "2026-06-06T00:00:00Z"},
+		{"  2026-06-06  ", "2026-06-06T00:00:00Z"},
+		{"2026-06-06T08:30:00Z", "2026-06-06T08:30:00Z"}, // already RFC3339: pass through
+		{"not-a-date", "not-a-date"},                     // let the server validate
+	}
+	for _, tc := range cases {
+		if got := normalizeDate(tc.in); got != tc.want {
+			t.Errorf("normalizeDate(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestRunUsage(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/open/v1/usage/summary" {
