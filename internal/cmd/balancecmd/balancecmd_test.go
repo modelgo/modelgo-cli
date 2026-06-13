@@ -150,13 +150,16 @@ func TestRunOverview_UnknownTenant(t *testing.T) {
 
 func TestRunTransactions(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("type") != "consumption" {
-			t.Errorf("type filter = %q, want consumption", r.URL.Query().Get("type"))
+		if r.URL.Query().Get("type") != "settle" {
+			t.Errorf("type filter = %q, want settle", r.URL.Query().Get("type"))
 		}
 		json.NewEncoder(w).Encode(map[string]any{
 			"code": 0, "msg": "ok",
-			"data": []map[string]any{
-				{"id": "tx1", "type": "consumption", "amount": -0.15, "currency": "CNY", "description": "gpt-4o call"},
+			"data": map[string]any{ // billing list wrapper {items, next_cursor}; amount string, reason (not description)
+				"next_cursor": "",
+				"items": []map[string]any{
+					{"id": "tx1", "type": "settle", "amount": "-0.15", "currency": "CNY", "reason": "gpt-4o call"},
+				},
 			},
 		})
 	}))
@@ -165,7 +168,7 @@ func TestRunTransactions(t *testing.T) {
 	cfgPath, storePath := setupTestEnv(t, srv.URL)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"transactions", "--type", "consumption", "--config", cfgPath, "--store", storePath}, "", &stdout, &stderr)
+	code := Run([]string{"transactions", "--type", "settle", "--config", cfgPath, "--store", storePath}, "", &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
 	}
@@ -179,9 +182,13 @@ func TestRunGrant(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"code": 0, "msg": "ok",
-			"data": map[string]any{
-				"initial_grant":     100.0,
+			"data": map[string]any{ // billing grant-status: string decimals + currency/granted
+				"tenant_id":         "ten_test123",
+				"currency":          "CNY",
+				"initial_grant":     "100",
+				"current_balance":   "65",
 				"percent_remaining": 65.0,
+				"granted":           true,
 				"depleted":          false,
 			},
 		})

@@ -47,15 +47,18 @@ func TestRunList(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(map[string]any{
 			"code": 0, "msg": "ok",
-			"data": []map[string]any{
-				{
-					"request_id":      "abc123",
-					"requested_model": "gpt-4o",
-					"status":          "success",
-					"total_tokens":    1523,
-					"latency_ms":      1230,
-					"final_amount":    0.15,
-					"currency":        "CNY",
+			"data": map[string]any{ // observer list wrapper: {items, limit}
+				"limit": 20,
+				"items": []map[string]any{
+					{
+						"request_id":      "abc123",
+						"requested_model": "gpt-4o",
+						"status":          "success",
+						"total_tokens":    1523,
+						"latency_ms":      1230,
+						"final_amount":    "0.15", // string-encoded decimal upstream
+						"currency":        "CNY",
+					},
 				},
 			},
 		})
@@ -85,19 +88,21 @@ func TestRunDetail(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(map[string]any{
 			"code": 0, "msg": "ok",
-			"data": map[string]any{
-				"request_id":      "req-abc",
-				"requested_model": "gpt-4o",
-				"status":          "success",
-				"latency_ms":      1230,
-				"ttft_ms":         320,
-				"tpot_ms":         45,
-				"input_tokens":    1024,
-				"output_tokens":   499,
-				"final_amount":    0.15,
-				"currency":        "CNY",
-				"billing_status":  "settled",
-				"call_type":       "chat",
+			"data": map[string]any{ // observer detail wrapper: {log: {row}}
+				"log": map[string]any{
+					"request_id":      "req-abc",
+					"requested_model": "gpt-4o",
+					"status":          "success",
+					"latency_ms":      1230,
+					"ttft_ms":         320,
+					"tpot_ms":         45,
+					"input_tokens":    1024,
+					"output_tokens":   499,
+					"final_amount":    "0.15", // string-encoded decimal upstream
+					"currency":        "CNY",
+					"billing_status":  "settled",
+					"call_type":       "chat",
+				},
 			},
 		})
 	}))
@@ -126,19 +131,12 @@ func TestRunStats(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(map[string]any{
 			"code": 0, "msg": "ok",
-			"data": map[string]any{
+			"data": map[string]any{ // observer stats: {totals, groups:[{key,label,spend,requests,tokens}]}
+				"from": "2026-06-01T00:00:00Z", "to": "2026-06-13T00:00:00Z",
+				"granularity": "day", "group_by": "model",
+				"totals": map[string]any{"spend": "123.45", "requests": 1234, "tokens": 612000},
 				"groups": []map[string]any{
-					{
-						"model":              "gpt-4o",
-						"requests":           1234,
-						"errors":             12,
-						"error_rate":         0.0097,
-						"input_tokens":       523000,
-						"output_tokens":      89000,
-						"average_latency_ms": 1450,
-						"cost":               123.45,
-						"currency":           "CNY",
-					},
+					{"key": "gpt-4o", "label": "gpt-4o", "spend": "123.45", "requests": 1234, "tokens": 612000},
 				},
 			},
 		})
@@ -168,12 +166,12 @@ func TestRunUsage(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(map[string]any{
 			"code": 0, "msg": "ok",
-			"data": map[string]any{
-				"period": "2026-05-28 ~ 2026-06-04",
+			"data": map[string]any{ // observer usage: period object + nested spend{amount,currency}
+				"period": map[string]any{"from": "2026-05-28T00:00:00Z", "to": "2026-06-04T00:00:00Z"},
 				"total": map[string]any{
-					"spend":              191.34,
-					"currency":           "CNY",
+					"spend":              map[string]any{"amount": "191.34", "currency": "CNY"},
 					"requests":           1801,
+					"tokens":             891000,
 					"input_tokens":       757000,
 					"output_tokens":      134000,
 					"error_rate":         0.0083,

@@ -43,23 +43,29 @@ func Run(args []string, tenant string, stdout, stderr io.Writer) int {
 // ── logs (list) ─────────────────────────────────────────────────────────────
 
 type modelLog struct {
-	RequestID      string    `json:"request_id"`
-	StartedAt      time.Time `json:"started_at"`
-	RequestedModel string    `json:"requested_model"`
-	Status         string    `json:"status"`
-	InputTokens    int       `json:"input_tokens"`
-	OutputTokens   int       `json:"output_tokens"`
-	TotalTokens    int       `json:"total_tokens"`
-	LatencyMs      int       `json:"latency_ms"`
-	FinalAmount    float64   `json:"final_amount"`
-	Currency       string    `json:"currency"`
+	RequestID      string            `json:"request_id"`
+	StartedAt      time.Time         `json:"started_at"`
+	RequestedModel string            `json:"requested_model"`
+	Status         string            `json:"status"`
+	InputTokens    int               `json:"input_tokens"`
+	OutputTokens   int               `json:"output_tokens"`
+	TotalTokens    int               `json:"total_tokens"`
+	LatencyMs      int               `json:"latency_ms"`
+	FinalAmount    apiclient.Decimal `json:"final_amount"` // string-encoded decimal upstream
+	Currency       string            `json:"currency"`
+}
+
+// modelLogList is the observer list wrapper: envelope.data = {items:[...],limit}.
+type modelLogList struct {
+	Items []modelLog `json:"items"`
+	Limit int        `json:"limit"`
 }
 
 func runList(args []string, tenant string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("logs", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "write structured JSON output")
-	limit := fs.Int("limit", 20, "number of results (max 100)")
+	limit := fs.Int("limit", 20, "number of results (max 200)")
 	preset := fs.String("preset", "", "time preset: 1h, 24h, 7d")
 	status := fs.String("status", "", "filter by status: success/error/timeout")
 	model := fs.String("model", "", "filter by model name")
@@ -82,7 +88,7 @@ func runList(args []string, tenant string, stdout, stderr io.Writer) int {
 	defer cancel()
 
 	params := url.Values{}
-	if *limit > 0 && *limit <= 100 {
+	if *limit > 0 && *limit <= 200 {
 		params.Set("limit", fmt.Sprintf("%d", *limit))
 	}
 	if *preset != "" {
@@ -101,11 +107,12 @@ func runList(args []string, tenant string, stdout, stderr io.Writer) int {
 		params.Set("api_key_id", *apiKey)
 	}
 
-	var logs []modelLog
-	if err := client.GetWithQuery(ctx, "model-logs", params, &logs); err != nil {
+	var resp modelLogList
+	if err := client.GetWithQuery(ctx, "model-logs", params, &resp); err != nil {
 		fmt.Fprintf(stderr, "logs: %v\n", err)
 		return 1
 	}
+	logs := resp.Items
 
 	if *jsonOut {
 		enc := json.NewEncoder(stdout)
@@ -139,7 +146,7 @@ func runList(args []string, tenant string, stdout, stderr io.Writer) int {
 			modelName = modelName[:19] + "..."
 		}
 		symbol := currencySymbol(l.Currency)
-		cost := fmt.Sprintf("%s%.2f", symbol, l.FinalAmount)
+		cost := fmt.Sprintf("%s%.2f", symbol, l.FinalAmount.Float())
 		latency := fmt.Sprintf("%dms", l.LatencyMs)
 		fmt.Fprintf(stdout, "%-24s %-20s %-24s %-10s %8d %10s %8s\n",
 			reqID, started, modelName, l.Status, l.TotalTokens, latency, cost)
@@ -166,21 +173,27 @@ type modelLogDetail struct {
 	OutputTokens     int       `json:"output_tokens"`
 	CacheReadTokens  int       `json:"cache_read_tokens"`
 	CacheWriteTokens int       `json:"cache_write_tokens"`
-	TotalTokens      int       `json:"total_tokens"`
-	FinalAmount      float64   `json:"final_amount"`
-	Currency         string    `json:"currency"`
-	BillingStatus    string    `json:"billing_status"`
-	WorkspaceID      string    `json:"workspace_id"`
-	AccountID        string    `json:"account_id"`
-	APIKeyID         string    `json:"api_key_id"`
-	CallType         string    `json:"call_type"`
-	Path             string    `json:"path"`
+	TotalTokens      int               `json:"total_tokens"`
+	FinalAmount      apiclient.Decimal `json:"final_amount"` // string-encoded decimal upstream
+	Currency         string            `json:"currency"`
+	BillingStatus    string            `json:"billing_status"`
+	WorkspaceID      string            `json:"workspace_id"`
+	AccountID        string            `json:"account_id"`
+	APIKeyID         string            `json:"api_key_id"`
+	CallType         string            `json:"call_type"`
+	Path             string            `json:"path"`
+}
+
+// modelLogDetailEnvelope wraps the detail row: observer returns envelope.data =
+// {"log": {row}}.
+type modelLogDetailEnvelope struct {
+	Log modelLogDetail `json:"log"`
 }
 
 type payloadResponse struct {
 	ContentType string `json:"content_type"`
 	BodyB64     string `json:"body_b64"`
-	Size        int    `json:"size"`
+	Size        int64  `json:"size"`
 	Truncated   bool   `json:"truncated"`
 }
 
@@ -217,11 +230,12 @@ func runDetail(requestID string, args []string, tenant string, stdout, stderr io
 	defer cancel()
 
 	path := fmt.Sprintf("model-logs/%s", url.PathEscape(requestID))
-	var detail modelLogDetail
-	if err := client.Get(ctx, path, &detail); err != nil {
+	var env modelLogDetailEnvelope
+	if err := client.Get(ctx, path, &env); err != nil {
 		fmt.Fprintf(stderr, "logs: %v\n", err)
 		return 1
 	}
+	detail := env.Log
 
 	if *jsonOut {
 		enc := json.NewEncoder(stdout)
@@ -259,7 +273,7 @@ func runDetail(requestID string, args []string, tenant string, stdout, stderr io
 	fmt.Fprintln(stdout)
 
 	symbol := currencySymbol(detail.Currency)
-	fmt.Fprintf(stdout, "  Cost:            %s%.2f\n", symbol, detail.FinalAmount)
+	fmt.Fprintf(stdout, "  Cost:            %s%.2f\n", symbol, detail.FinalAmount.Float())
 	fmt.Fprintf(stdout, "  Billing Status:  %s\n", detail.BillingStatus)
 	if detail.WorkspaceID != "" {
 		fmt.Fprintf(stdout, "  Workspace:       %s\n", detail.WorkspaceID)
@@ -350,20 +364,28 @@ func runPayload(requestID string, args []string, tenant string, stdout, stderr i
 
 // ── logs stats ──────────────────────────────────────────────────────────────
 
+// statsMetric is the observer stats metric (flat: spend/requests/tokens). Spend
+// is a string-encoded decimal; the endpoint does not return errors / latency /
+// input-output token split / currency per group.
+type statsMetric struct {
+	Spend    apiclient.Decimal `json:"spend"`
+	Requests int64             `json:"requests"`
+	Tokens   int64             `json:"tokens"`
+}
+
 type statsGroup struct {
-	Model        string  `json:"model"`
-	Requests     int     `json:"requests"`
-	Errors       int     `json:"errors"`
-	ErrorRate    float64 `json:"error_rate"`
-	InputTokens  int64   `json:"input_tokens"`
-	OutputTokens int64   `json:"output_tokens"`
-	AvgLatencyMs float64 `json:"average_latency_ms"`
-	Cost         float64 `json:"cost"`
-	Currency     string  `json:"currency"`
+	Key         string `json:"key"`
+	Label       string `json:"label"`
+	statsMetric        // spend/requests/tokens are flat at the group level
 }
 
 type statsResponse struct {
-	Groups []statsGroup `json:"groups"`
+	From        string       `json:"from"`
+	To          string       `json:"to"`
+	Granularity string       `json:"granularity"`
+	GroupBy     string       `json:"group_by"`
+	Totals      statsMetric  `json:"totals"`
+	Groups      []statsGroup `json:"groups"`
 }
 
 func runStats(args []string, tenant string, stdout, stderr io.Writer) int {
@@ -426,27 +448,25 @@ func runStats(args []string, tenant string, stdout, stderr io.Writer) int {
 	}
 
 	fmt.Fprintf(stdout, "Call Stats (group by: %s, granularity: %s)\n\n", *groupBy, *granularity)
+	fmt.Fprintf(stdout, "Totals: requests %s, tokens %s, spend %s\n\n",
+		formatInt64(resp.Totals.Requests), formatInt64(resp.Totals.Tokens), resp.Totals.Spend)
 	if len(resp.Groups) == 0 {
-		fmt.Fprintln(stdout, "No data available for the selected period.")
+		fmt.Fprintln(stdout, "No grouped data available for the selected period.")
 		return 0
 	}
 
 	for _, g := range resp.Groups {
-		symbol := currencySymbol(g.Currency)
-		label := g.Model
+		label := g.Label
+		if label == "" {
+			label = g.Key
+		}
 		if label == "" {
 			label = "(ungrouped)"
 		}
 		fmt.Fprintf(stdout, "%s\n", label)
-		fmt.Fprintf(stdout, "  Requests:   %s", formatInt64(int64(g.Requests)))
-		if g.Errors > 0 {
-			fmt.Fprintf(stdout, "    Errors: %d (%.2f%%)", g.Errors, g.ErrorRate*100)
-		}
-		fmt.Fprintln(stdout)
-		fmt.Fprintf(stdout, "  Tokens:     in %s / out %s\n",
-			formatInt64(g.InputTokens), formatInt64(g.OutputTokens))
-		fmt.Fprintf(stdout, "  Avg Latency: %.0fms\n", g.AvgLatencyMs)
-		fmt.Fprintf(stdout, "  Cost:       %s%.2f\n", symbol, g.Cost)
+		fmt.Fprintf(stdout, "  Requests: %s\n", formatInt64(g.Requests))
+		fmt.Fprintf(stdout, "  Tokens:   %s\n", formatInt64(g.Tokens))
+		fmt.Fprintf(stdout, "  Spend:    %s\n", g.Spend)
 		fmt.Fprintln(stdout)
 	}
 	return 0
@@ -454,19 +474,30 @@ func runStats(args []string, tenant string, stdout, stderr io.Writer) int {
 
 // ── logs usage ──────────────────────────────────────────────────────────────
 
+// usageMoney mirrors observer's nested spend object: {"amount":"<decimal>","currency":"CNY"}.
+type usageMoney struct {
+	Amount   apiclient.Decimal `json:"amount"`
+	Currency string            `json:"currency"`
+}
+
+type usagePeriod struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
 type usageTotal struct {
-	Spend          float64 `json:"spend"`
-	Currency       string  `json:"currency"`
-	Requests       int64   `json:"requests"`
-	InputTokens    int64   `json:"input_tokens"`
-	OutputTokens   int64   `json:"output_tokens"`
-	ErrorRate      float64 `json:"error_rate"`
-	AverageLatency float64 `json:"average_latency_ms"`
+	Spend          usageMoney `json:"spend"` // nested object; currency lives here, not at total level
+	Requests       int64      `json:"requests"`
+	Tokens         int64      `json:"tokens"`
+	InputTokens    int64      `json:"input_tokens"`
+	OutputTokens   int64      `json:"output_tokens"`
+	ErrorRate      float64    `json:"error_rate"` // fraction 0..1
+	AverageLatency float64    `json:"average_latency_ms"`
 }
 
 type usageResponse struct {
-	Period string     `json:"period"`
-	Total  usageTotal `json:"total"`
+	Period usagePeriod `json:"period"` // object {from,to}, not a string
+	Total  usageTotal  `json:"total"`
 }
 
 func runUsage(args []string, tenant string, stdout, stderr io.Writer) int {
@@ -514,11 +545,11 @@ func runUsage(args []string, tenant string, stdout, stderr io.Writer) int {
 
 	fmt.Fprintln(stdout, "Usage Summary")
 	fmt.Fprintln(stdout)
-	if resp.Period != "" {
-		fmt.Fprintf(stdout, "Period:  %s\n", resp.Period)
+	if resp.Period.From != "" || resp.Period.To != "" {
+		fmt.Fprintf(stdout, "Period:  %s -> %s\n", resp.Period.From, resp.Period.To)
 	}
-	symbol := currencySymbol(resp.Total.Currency)
-	fmt.Fprintf(stdout, "Spend:   %s%.2f\n", symbol, resp.Total.Spend)
+	symbol := currencySymbol(resp.Total.Spend.Currency)
+	fmt.Fprintf(stdout, "Spend:   %s%.2f\n", symbol, resp.Total.Spend.Amount.Float())
 	fmt.Fprintf(stdout, "Requests: %s\n", formatInt64(resp.Total.Requests))
 	fmt.Fprintf(stdout, "Tokens:  in %s / out %s\n",
 		formatInt64(resp.Total.InputTokens), formatInt64(resp.Total.OutputTokens))
