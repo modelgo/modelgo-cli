@@ -46,15 +46,15 @@ func Run(args []string, tenant string, stdout, stderr io.Writer) int {
 // ── balance (overview) ──────────────────────────────────────────────────────
 
 type balanceResponse struct {
-	TenantID            string    `json:"tenant_id"`
-	Balance             float64   `json:"balance"`
-	FrozenBalance       float64   `json:"frozen_balance"`
-	Currency            string    `json:"currency"`
-	Status              string    `json:"status"`
-	LowBalanceThreshold float64   `json:"low_balance_threshold"`
-	AutoTopupEnabled    bool      `json:"auto_topup_enabled"`
-	AutoTopupAmount     float64   `json:"auto_topup_amount"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	TenantID            string            `json:"tenant_id"`
+	Balance             apiclient.Decimal `json:"balance"`               // upstream encodes decimals as JSON strings
+	FrozenBalance       apiclient.Decimal `json:"frozen_balance"`
+	Currency            string            `json:"currency"`
+	Status              string            `json:"status"`
+	LowBalanceThreshold apiclient.Decimal `json:"low_balance_threshold"`
+	AutoTopupEnabled    bool              `json:"auto_topup_enabled"`
+	AutoTopupAmount     apiclient.Decimal `json:"auto_topup_amount"`
+	UpdatedAt           time.Time         `json:"updated_at"`
 }
 
 func runOverview(args []string, tenant string, stdout, stderr io.Writer) int {
@@ -97,13 +97,13 @@ func runOverview(args []string, tenant string, stdout, stderr io.Writer) int {
 	}
 	symbol := currencySymbol(resp.Currency)
 	fmt.Fprintf(stdout, "Balance (tenant: %s)\n", displayTenant)
-	fmt.Fprintf(stdout, "  Available:    %s %s\n", symbol, formatAmount(resp.Balance, resp.Currency))
-	fmt.Fprintf(stdout, "  Frozen:       %s %s\n", symbol, formatAmount(resp.FrozenBalance, resp.Currency))
+	fmt.Fprintf(stdout, "  Available:    %s %s\n", symbol, formatAmount(resp.Balance.Float(), resp.Currency))
+	fmt.Fprintf(stdout, "  Frozen:       %s %s\n", symbol, formatAmount(resp.FrozenBalance.Float(), resp.Currency))
 	fmt.Fprintf(stdout, "  Currency:     %s\n", resp.Currency)
 	fmt.Fprintf(stdout, "  Status:       %s\n", resp.Status)
 	topup := "disabled"
 	if resp.AutoTopupEnabled {
-		topup = fmt.Sprintf("enabled (%s %s)", symbol, formatAmount(resp.AutoTopupAmount, resp.Currency))
+		topup = fmt.Sprintf("enabled (%s %s)", symbol, formatAmount(resp.AutoTopupAmount.Float(), resp.Currency))
 	}
 	fmt.Fprintf(stdout, "  Auto Top-up:  %s\n", topup)
 	if !resp.UpdatedAt.IsZero() {
