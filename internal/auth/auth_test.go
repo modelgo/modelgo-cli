@@ -583,3 +583,50 @@ func TestLoadActiveOnEmptyObjectReturnsNotExist(t *testing.T) {
 		t.Fatalf("LoadActive(cn) on {} = %v, want IsNotExist", err)
 	}
 }
+
+// FetchTenants must surface a {code,msg} business-error envelope (which the
+// gateway returns with HTTP 200) as a clean error, not a low-level JSON
+// unmarshal failure — observed live as `tenant list --remote` against test.
+func TestFetchTenantsEnvelopeError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"code":40401,"msg":"resource not found","data":null,"request_id":"x"}`))
+	}))
+	defer srv.Close()
+
+	_, err := FetchTenants(context.Background(), srv.Client(), &Credential{BaseURL: srv.URL, SessionToken: "t"})
+	if err == nil {
+		t.Fatal("expected error for {code:40401} envelope, got nil")
+	}
+	if !strings.Contains(err.Error(), "resource not found") || !strings.Contains(err.Error(), "40401") {
+		t.Fatalf("error = %q, want it to name the msg and code", err.Error())
+	}
+	if strings.Contains(err.Error(), "unmarshal") {
+		t.Fatalf("error leaked a low-level decode failure: %q", err.Error())
+	}
+}
+
+// FetchTenants accepts both the {code:0,data:[...]} success envelope and a bare
+// [...] array (backward compatibility).
+func TestFetchTenantsAcceptsEnvelopeAndBareArray(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+	}{
+		{"envelope", `{"code":0,"msg":"ok","data":[{"tenant_id":"ten_1","slug":"acme"}]}`},
+		{"bare", `[{"tenant_id":"ten_1","slug":"acme"}]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+
+			got, err := FetchTenants(context.Background(), srv.Client(), &Credential{BaseURL: srv.URL, SessionToken: "t"})
+			if err != nil {
+				t.Fatalf("FetchTenants: %v", err)
+			}
+			if len(got) != 1 || got[0].TenantID != "ten_1" || got[0].Slug != "acme" {
+				t.Fatalf("got %+v, want one tenant ten_1/acme", got)
+			}
+		})
+	}
+}

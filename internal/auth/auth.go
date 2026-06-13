@@ -668,16 +668,30 @@ func FetchTenants(ctx context.Context, client *http.Client, cred *Credential) ([
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("list tenants: HTTP %d", resp.StatusCode)
 	}
-	// Accept either {"data":[...]} or a bare [...].
+	// Accept {"code","msg","data":[...]} or a bare [...]. The gateway returns the
+	// enveloped form with HTTP 200 even for business errors (the real status is
+	// in `code`), so surface a non-zero code as a clean error rather than letting
+	// the bare-array decode fail with a confusing low-level unmarshal message.
 	var enveloped struct {
+		Code *int           `json:"code"`
+		Msg  string         `json:"msg"`
 		Data []RemoteTenant `json:"data"`
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal(body, &enveloped); err == nil && enveloped.Data != nil {
-		return enveloped.Data, nil
+	if err := json.Unmarshal(body, &enveloped); err == nil {
+		if enveloped.Code != nil && *enveloped.Code != 0 {
+			msg := enveloped.Msg
+			if msg == "" {
+				msg = "request failed"
+			}
+			return nil, fmt.Errorf("list tenants: %s (code %d)", msg, *enveloped.Code)
+		}
+		if enveloped.Data != nil {
+			return enveloped.Data, nil
+		}
 	}
 	var bare []RemoteTenant
 	if err := json.Unmarshal(body, &bare); err != nil {
