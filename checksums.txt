@@ -1,6 +1,0 @@
-d2301f86bdccb4225e959062382d20108eaac2ce023456f306485b8addcacacc  modelgo-0.1.2-rc.1-SNAPSHOT-7701312-darwin-amd64.tar.gz
-88480f50f971139c72866d73a69a67368a08a260c96b71e04add4eb7d6676ecf  modelgo-0.1.2-rc.1-SNAPSHOT-7701312-darwin-arm64.tar.gz
-9bc1719a182e3b996a793491775fd501da419a6c526d2b8a7cb2e72479cd9e1c  modelgo-0.1.2-rc.1-SNAPSHOT-7701312-linux-amd64.tar.gz
-534554cb7b7fff278260b4e030fcbe30a0029c146d46980493a1d902e65c7669  modelgo-0.1.2-rc.1-SNAPSHOT-7701312-linux-arm64.tar.gz
-13cfa7761480b595fab0e1c3400c299013d29eaca3643282f2817b872b7d89d1  modelgo-0.1.2-rc.1-SNAPSHOT-7701312-windows-amd64.zip
-3d57522bf6cfaeaded3ea3b6db4cf4afd8ddd4f0fbf0bcea71241531898a939c  modelgo-0.1.2-rc.1-SNAPSHOT-7701312-windows-arm64.zip

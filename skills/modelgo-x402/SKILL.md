@@ -1,6 +1,6 @@
 ---
 name: modelgo-x402
-version: 0.1.3
+version: 0.1.4
 description: "Call ModelGo model APIs through x402 pay-per-call. Use when the user wants anonymous paid model API access, x402, pay-per-call, Alipay AI payment, or modelgo-model-gateway without logging in. Triggers: x402, 支付调用模型, 匿名调用模型, 支付宝AI付, pay-per-call, 402 Payment Required."
 metadata:
   requires:
