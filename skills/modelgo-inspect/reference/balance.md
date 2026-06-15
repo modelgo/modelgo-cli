@@ -19,9 +19,9 @@ USAGE:
 
 FLAGS:
     --json              Write structured JSON output
-    --type TYPE         (transactions) Filter by type: consumption/recharge/refund/grant
-    --limit N           (transactions) Number of results, max 100 (default 20)
-    --before CURSOR     (transactions) Keyset pagination cursor
+    --type TYPE         (transactions) Filter by type: reserve/settle/release/recharge/adjust/write_off/grant
+    --limit N           (transactions) Number of results, max 200 (default 20)
+    --cursor CURSOR     (transactions) Keyset cursor: pass the next_cursor from a prior page
     --config PATH       Config file path (default ~/.modelgo/config.json)
     --store PATH        Credential store path (default ~/.modelgo/auth.json)
 ```
