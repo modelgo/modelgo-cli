@@ -109,18 +109,31 @@ QA 从 rc 切回 stable：
 
 `make release VERSION=x.y.z` 完整步骤：
 
-1. **本地 goreleaser snapshot** — 生成二进制产物和 `dist/checksums.txt`（不发布 GitHub Release）。
-2. **同步 checksums.txt** — `cp dist/checksums.txt checksums.txt`，如有变更则 commit 到 main。
-3. **Push main** — 确保 main 分支包含最新 checksums。
-4. **打 tag + push tag** — 触发 CI `release.yml` 正式构建、发布 GitHub Release、`npm publish`。
+1. **校验可快进** — `git fetch github main` 后确认 `github/main` 是 HEAD 的祖先；分叉则**提前报错**（不再 bump 后半途失败）。
+2. **bump + 资产** — `npm version` 写 `package.json`，`make skills` 重新生成 reference 并同步 SKILL.md 版本，`npm run lint:skills` 校验。
+3. **编译冒烟** — `goreleaser build --snapshot --clean` 仅交叉编译六平台，**不产出归档/checksums、不发布**，纯粹提前发现编译错误。
+4. **commit** — 提交 `package.json`/`package-lock.json`/`skills`（**不再有 checksums.txt**）。
+5. **push main → github + origin** — 两个 remote 都推。
+6. **打 tag + push tag 到 github** — 触发 CI `release.yml` 正式构建、发布 GitHub Release、`npm publish`。
 
 CI（`release.yml`）只负责：
-- GoReleaser 正式构建 + 发布 GitHub Release
+- GoReleaser 正式构建 + 发布 GitHub Release（产物 `modelgo-<ver>-<os>-<arch>.*` + `checksums.txt`）
 - `npm publish`
+
+> **checksums 真源 = GitHub Release**。npm 包**不再内置** `checksums.txt`；`scripts/install.js` 在安装时从 `releases/download/v<ver>/checksums.txt` 下载权威校验值（mirror 兜底），再校验下载的二进制。**绝不能**回退到"本地 snapshot 生成 checksums 塞进 npm 包"——snapshot 的产物名/SHA 永远对不上 CI 真实发布，会导致全员 `Checksum entry not found`（v0.1.1–0.1.3 即因此损坏并已 deprecate）。
+
+> **本地自测的盲区**：`make install-local` 用 `--ignore-scripts` + 本地二进制，**不会**跑真实下载/校验路径。验证发布链路必须做一次真实安装：`npm install --prefix /tmp/x @model-go/cli@<rc或latest>` 看 postinstall 是否成功 + 二进制能否运行。
+
+### 双 remote 同步（dev=GitLab / release=GitHub）
+
+- `origin` = GitLab（`git@gitlab.ops.modelgo.com:backend/modelgo-cli.git`，日常开发）。
+- `github` = GitHub（public，`make release` 推这里触发 CI）。
+- 两边 `main` 历史曾在 `v0.1.2-rc.1` 之后分叉成**不同 hash 的平行历史**（内容相同），导致 `git push github main` 非快进失败。优化后的 `make release` 会在 bump 前用 `merge-base --is-ancestor` 提前拦截并提示。
+- **彻底解决**：做一次性对齐让两个 remote 共享历史（二选一 force-push），之后 `make release` 的 push 永远是干净快进。未对齐时，临时发布的手法是基于 `github/main` cherry-pick 新提交后推送 + 打 tag（见 git 历史 v0.1.3/v0.1.4）。
 
 前置依赖：
 - 本机安装 [GoReleaser](https://goreleaser.com/install/)（`brew install goreleaser`）。
-- GoReleaser 使用 `--snapshot` 模式，**不需要** GitHub Token，不会发布 Release。
+- `make release` 内用 `goreleaser build --snapshot`，**不需要** GitHub Token，不发布 Release。
 
 ## 发布前置条件（一次性配置）
 
@@ -147,7 +160,7 @@ CI（`release.yml`）只负责：
 | `make uninstall-local` | 清理全局 `@model-go/cli` |
 | `make test` | `go test -race ./...` + `npm test` + `npm run lint:skills`（含版本一致性校验） |
 | `make push` / `make push-tags` | push main / 所有 tag 到 GitHub |
-| `make release VERSION=x.y.z` | bump package.json + 重新生成 skill 资产 → 本地生成 checksums → commit → push main → 打 stable tag → CI 走 `@latest` |
+| `make release VERSION=x.y.z` | 校验可快进 → bump package.json + 重新生成 skill 资产 → 编译冒烟 → commit → push main(github+origin) → 打 stable tag → CI 走 `@latest` |
 | `make release VERSION=x.y.z-rc.N` | 内测版：同上，打 rc tag → CI 走 `@rc` |
 | `make clean` | 清除 `bin/` `dist/` `node_modules/` |
 

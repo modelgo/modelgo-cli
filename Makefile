@@ -9,7 +9,7 @@ help:
 	@echo ""
 	@echo "  make push                  Push $(BRANCH) to GitHub (creates '$(GITHUB_REMOTE)' remote if missing)"
 	@echo "  make push-tags             Push all tags to GitHub"
-	@echo "  make release VERSION=0.1.0 Bump checksums → commit → push main → tag → triggers release"
+	@echo "  make release VERSION=0.1.0 Bump version + skills → commit → push main → tag → triggers release"
 	@echo "  make test                  go test + npm test + lint:skills"
 	@echo "  make build                 Build local Go binary into bin/"
 	@echo "  make skills                Regenerate skill reference + sync skill versions"
@@ -32,18 +32,25 @@ push-tags: github-remote
 release: github-remote
 	@if [ -z "$(VERSION)" ]; then echo "Usage: make release VERSION=0.1.0"; exit 1; fi
 	@git diff --quiet && git diff --cached --quiet || { echo "working tree/index not clean; commit or stash unrelated changes first"; exit 1; }
+	@echo "Checking $(GITHUB_REMOTE)/$(BRANCH) is fast-forwardable from HEAD..."
+	git fetch $(GITHUB_REMOTE) $(BRANCH)
+	@git merge-base --is-ancestor $(GITHUB_REMOTE)/$(BRANCH) HEAD || { \
+		echo ""; \
+		echo "ERROR: $(GITHUB_REMOTE)/$(BRANCH) is not an ancestor of HEAD — histories have diverged."; \
+		echo "'git push $(GITHUB_REMOTE) $(BRANCH)' would be rejected (non-fast-forward)."; \
+		echo "Align the two remotes once (see CLAUDE.md → 双 remote 同步), then re-run."; \
+		exit 1; }
 	@echo "Bumping package.json + skill assets to v$(VERSION)..."
 	npm version $(VERSION) --no-git-tag-version --allow-same-version
 	$(MAKE) skills
 	npm run lint:skills
+	@echo "Cross-compile smoke test (build only, nothing published)..."
+	goreleaser build --snapshot --clean
 	git add package.json package-lock.json skills
-	@echo "Generating checksums for v$(VERSION)..."
-	goreleaser release --snapshot --clean
-	cp dist/checksums.txt checksums.txt
-	git add checksums.txt
-	git diff --cached --quiet -- package.json package-lock.json skills checksums.txt || \
-		git commit -m "chore: release v$(VERSION) (package.json, lock, skills, checksums)" -- package.json package-lock.json skills checksums.txt
+	git diff --cached --quiet -- package.json package-lock.json skills || \
+		git commit -m "chore: release v$(VERSION) (package.json, lock, skills)" -- package.json package-lock.json skills
 	git push $(GITHUB_REMOTE) $(BRANCH)
+	git push origin $(BRANCH)
 	git tag v$(VERSION)
 	git push $(GITHUB_REMOTE) v$(VERSION)
 	@echo "Pushed tag v$(VERSION). GitHub Actions release workflow should now run."
