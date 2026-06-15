@@ -31,6 +31,13 @@ const ext = isWindows ? ".zip" : ".tar.gz";
 const archiveName = `${NAME}-${VERSION}-${platform}-${arch}${ext}`;
 const GITHUB_URL = `https://github.com/${REPO}/releases/download/v${VERSION}/${archiveName}`;
 
+// checksums.txt is published by goreleaser alongside the release artifacts.
+// We fetch it from the release at install time rather than bundling it in the
+// npm package: a bundled copy generated locally (goreleaser --snapshot) can
+// never match the CI-built release artifacts' names or SHAs.
+const CHECKSUMS_NAME = "checksums.txt";
+const GITHUB_CHECKSUMS_URL = `https://github.com/${REPO}/releases/download/v${VERSION}/${CHECKSUMS_NAME}`;
+
 const binDir = path.join(__dirname, "..", "bin");
 const dest = path.join(binDir, NAME + (isWindows ? ".exe" : ""));
 
@@ -184,6 +191,21 @@ function download(url, destPath) {
   execFileSync("curl", args, { stdio: ["ignore", "ignore", "pipe"] });
 }
 
+// Try each URL in order, returning once one succeeds. Throws the last error if
+// all fail.
+function downloadFirst(urls, destPath) {
+  let lastErr;
+  for (const url of urls) {
+    try {
+      download(url, destPath);
+      return;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}
+
 function extractZipWindows(archivePath, destDir) {
   const psOpts = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"];
   const psStdio = ["ignore", "inherit", "inherit"];
@@ -228,20 +250,33 @@ function install() {
   const archivePath = path.join(tmpDir, archiveName);
 
   try {
-    let lastErr;
-    let downloaded = false;
-    for (const url of downloadUrls) {
-      try {
-        download(url, archivePath);
-        downloaded = true;
-        break;
-      } catch (e) {
-        lastErr = e;
-      }
-    }
-    if (!downloaded) throw lastErr;
+    downloadFirst(downloadUrls, archivePath);
 
-    const expectedHash = getExpectedChecksum(archiveName);
+    // Fetch the authoritative checksums.txt from the same release (GitHub
+    // first, then mirrors). If it can't be fetched (restricted network),
+    // skip verification rather than block the install — the binary itself
+    // came from an allowlisted host over HTTPS.
+    const checksumsUrls = [
+      GITHUB_CHECKSUMS_URL,
+      ...resolveMirrorUrls(process.env, CHECKSUMS_NAME, VERSION),
+    ];
+    for (const u of checksumsUrls) ALLOWED_HOSTS.add(new URL(u).hostname);
+    const checksumsPath = path.join(tmpDir, CHECKSUMS_NAME);
+    let checksumsFetched = true;
+    try {
+      downloadFirst(checksumsUrls, checksumsPath);
+    } catch (e) {
+      checksumsFetched = false;
+      console.error(
+        `[WARN] could not fetch ${CHECKSUMS_NAME} from release ` +
+        `(${e.message}); skipping checksum verification`
+      );
+    }
+    // A fetched-but-incomplete checksums.txt is a real integrity problem and
+    // must fail loudly, so parse outside the network try/catch above.
+    const expectedHash = checksumsFetched
+      ? getExpectedChecksum(archiveName, tmpDir)
+      : null;
     verifyChecksum(archivePath, expectedHash);
 
     if (isWindows) {
