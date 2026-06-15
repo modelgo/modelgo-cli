@@ -80,3 +80,24 @@ func TestRunUseUnknownTenantFails(t *testing.T) {
 		t.Fatalf("expected non-zero exit for unknown tenant, stdout=%s", stdout.String())
 	}
 }
+
+func TestTenantListJSON(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "auth.json")
+	_ = auth.SaveCredential(path, auth.Credential{Env: "cn", SessionToken: "s1", TenantID: "ten_1", TenantSlug: "acme", TenantName: "Acme Corp"})
+	_ = auth.SaveCredential(path, auth.Credential{Env: "cn", SessionToken: "s2", TenantID: "ten_2", TenantSlug: "globex"})
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"list", "--json", "--env", "cn", "--store", path}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `"tenant_id"`) || !strings.Contains(out, `"acme"`) {
+		t.Fatalf("unexpected JSON output: %s", out)
+	}
+	// active tenant (ten_2) should have active:true
+	if !strings.Contains(out, `"active":true`) {
+		t.Fatalf("active flag missing in JSON: %s", out)
+	}
+}

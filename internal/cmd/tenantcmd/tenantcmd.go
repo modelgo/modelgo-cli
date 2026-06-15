@@ -5,6 +5,7 @@
 package tenantcmd
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -96,6 +97,7 @@ func runListCmd(args []string, stdout, stderr io.Writer) int {
 	configPath := fs.String("config", "", "config file path")
 	store := fs.String("store", "", "credential store path")
 	remote := fs.Bool("remote", false, "also fetch all account tenants from the server")
+	jsonOut := fs.Bool("json", false, "write structured JSON output")
 	positional, flagArgs := splitFlagsAndPositionals(args, fs)
 	if err := fs.Parse(flagArgs); err != nil {
 		return 2
@@ -112,6 +114,13 @@ func runListCmd(args []string, stdout, stderr io.Writer) int {
 	if *remote {
 		if err := runListRemote(stdout, stderr, envName, *store); err != nil {
 			fmt.Fprintf(stderr, "tenant list --remote: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	if *jsonOut {
+		if err := runListJSON(stdout, envName, *store); err != nil {
+			fmt.Fprintf(stderr, "tenant list: %v\n", err)
 			return 1
 		}
 		return 0
@@ -142,6 +151,33 @@ func runList(w io.Writer, envName, path string) error {
 		fmt.Fprintf(w, "%s%-26s %-16s %s\n", marker, c.TenantID, dash(c.TenantSlug), dash(c.TenantName))
 	}
 	return nil
+}
+
+// runListJSON writes all logged-in tenants as a JSON array to w. Each element
+// includes tenant_id, slug, name, and active flag.
+func runListJSON(w io.Writer, envName, path string) error {
+	creds, active, err := auth.ListTenants(envName, path)
+	if err != nil {
+		return err
+	}
+	type tenantJSON struct {
+		TenantID string `json:"tenant_id"`
+		Slug     string `json:"slug"`
+		Name     string `json:"name"`
+		Active   bool   `json:"active"`
+	}
+	out := make([]tenantJSON, 0, len(creds))
+	for _, c := range creds {
+		out = append(out, tenantJSON{
+			TenantID: c.TenantID,
+			Slug:     c.TenantSlug,
+			Name:     c.TenantName,
+			Active:   c.TenantID == active,
+		})
+	}
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	return enc.Encode(out)
 }
 
 func dash(s string) string {
@@ -215,6 +251,7 @@ FLAGS:
     --env NAME           Operate on a specific env (default: active env from config)
     --config PATH        Config file path (default ~/.modelgo/config.json)
     --store PATH         Credential store path (default ~/.modelgo/auth.json)
+    --json               (list only) Write structured JSON output
     --remote             (list only) Also fetch all account tenants from the server`)
 }
 

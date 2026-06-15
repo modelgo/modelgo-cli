@@ -109,6 +109,8 @@ type tokenResponse struct {
 	SessionToken     string `json:"session_token"`
 	AccountID        string `json:"account_id"`
 	TenantID         string `json:"tenant_id"`
+	TenantSlug       string `json:"tenant_slug"`
+	TenantName       string `json:"tenant_name"`
 	ExpiresIn        int64  `json:"expires_in"`
 	TokenType        string `json:"token_type"`
 	SessionExpiresAt string `json:"session_expires_at"`
@@ -200,6 +202,8 @@ func pollAndStore(ctx context.Context, opts Options, deviceCode string, expiresI
 				SessionToken: out.SessionToken,
 				AccountID:    out.AccountID,
 				TenantID:     out.TenantID,
+				TenantSlug:   out.TenantSlug,
+				TenantName:   out.TenantName,
 				TokenType:    out.TokenType,
 				ExpiresAt:    expiresAt,
 				SavedAt:      time.Now().UTC(),
