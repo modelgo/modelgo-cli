@@ -1,6 +1,6 @@
 ---
 name: modelgo-call
-version: 0.1.4
+version: 0.1.5-rc.1
 description: "Call ModelGo models with an API key (OpenAI-compatible). Use when the user wants to run a chat/completion, stream a response, list models, create embeddings, do vision/image/audio/multimodal calls, or hit any /v1/* endpoint with their mgk_ API key. Triggers: 调用模型, 跑模型, chat, 对话补全, 流式, embeddings, 向量, 列模型, list models, 多模态, 图片生成, 语音, vision, API key 调用."
 metadata:
   requires:
