@@ -34,6 +34,15 @@ const messages = {
     done:          "安装完成！\n试试跟你的 AI 工具（Claude Code、Codex 等）说：\"用 modelgo 跟我打个招呼\"",
     cancelled:     "安装已取消",
     nonTtyHint:    "非交互模式，已完成 npm 全局安装 + skills 安装。",
+    envPrompt:     "请选择环境 / Select environment",
+    envCN:         "国内（api.modelgo.com）",
+    envIntl:       "国际（api.modelgo.ai）",
+    envDone:       "已切换到 %s 环境",
+    envFail:       "环境切换失败，可稍后运行: modelgo env use %s",
+    authPrompt:    "现在登录 modelgo 吗？（将通过浏览器授权，也可稍后再登录）",
+    authDone:      "登录成功",
+    authSkip:      "已跳过登录。稍后运行: modelgo auth login",
+    authFail:      "登录失败，可稍后运行: modelgo auth login",
   },
   en: {
     setup:         "Setting up modelgo CLI...",
@@ -49,6 +58,15 @@ const messages = {
     done:          "You are all set!\nTry asking your AI tool (Claude Code, Codex, etc.): \"Have modelgo say hello to me\"",
     cancelled:     "Installation cancelled",
     nonTtyHint:    "Non-interactive mode. Completed global install + skills install.",
+    envPrompt:     "Select environment",
+    envCN:         "China (api.modelgo.com)",
+    envIntl:       "International (api.modelgo.ai)",
+    envDone:       "Switched to %s environment",
+    envFail:       "Failed to switch env. Run later: modelgo env use %s",
+    authPrompt:    "Log in to modelgo now? (browser authorization; you can also log in later)",
+    authDone:      "Logged in",
+    authSkip:      "Skipped login. Run later: modelgo auth login",
+    authFail:      "Login failed. Run later: modelgo auth login",
   },
 };
 
@@ -200,6 +218,42 @@ async function stepInstallSkills(msg, isInteractive) {
   }
 }
 
+async function stepSelectEnv(msg) {
+  const env = handleCancel(
+    await p.select({
+      message: msg.envPrompt,
+      options: [
+        { value: "cn", label: msg.envCN },
+        { value: "intl", label: msg.envIntl },
+      ],
+    }),
+    msg
+  );
+  try {
+    // `modelgo` is on PATH after the global install in stepInstallGlobally.
+    runSilent("modelgo", ["env", "use", env], { timeout: 15000 });
+    p.log.success(fmt(msg.envDone, env));
+  } catch (_) {
+    p.log.warn(fmt(msg.envFail, env));
+  }
+}
+
+async function stepAuthLogin(msg) {
+  const wantLogin = handleCancel(await p.confirm({ message: msg.authPrompt }), msg);
+  if (!wantLogin) {
+    p.log.info(msg.authSkip);
+    return;
+  }
+  try {
+    // `auth login` prints a verification URL and blocks polling until the user
+    // approves in the browser — inherit stdio so the URL and progress show.
+    execCmd("modelgo", ["auth", "login"], { stdio: "inherit" });
+    p.log.success(msg.authDone);
+  } catch (_) {
+    p.log.warn(msg.authFail);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -213,6 +267,8 @@ async function main() {
     p.intro(msg.setup);
     await stepInstallGlobally(msg, isInteractive);
     await stepInstallSkills(msg, isInteractive);
+    await stepSelectEnv(msg);
+    await stepAuthLogin(msg);
     p.outro(msg.done);
   } else {
     console.log(msg.setup);

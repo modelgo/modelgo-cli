@@ -14,7 +14,7 @@ const DefaultEnv = "cn"
 
 var builtIn = map[string]string{
 	"cn":   "https://api.modelgo.com",
-	"intl": "https://api.modelgo.global",
+	"intl": "https://api.modelgo.ai",
 }
 
 // ErrUnknownEnv is returned when an env name is neither built-in nor present

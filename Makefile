@@ -56,7 +56,7 @@ release: github-remote
 	@echo "Pushed tag v$(VERSION). GitHub Actions release workflow should now run."
 
 test:
-	go test -race ./...
+	GOWORK=off go test -race ./...
 	npm test
 	npm run lint:skills
 
@@ -68,7 +68,7 @@ skills: build
 
 build:
 	mkdir -p bin
-	go build -ldflags "-X github.com/modelgo/modelgo-cli/internal/version.Version=v0.0.0-dev" \
+	GOWORK=off go build -ldflags "-X github.com/modelgo/modelgo-cli/internal/version.Version=v0.0.0-dev" \
 		-o bin/modelgo ./cmd/modelgo-cli
 	@echo "Built bin/modelgo — try: ./bin/modelgo hello"
 

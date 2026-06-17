@@ -44,7 +44,7 @@ The CLI talks to a named environment. Two are built in:
 | Env    | Base URL                     |
 | ------ | ---------------------------- |
 | `cn`   | `https://api.modelgo.com`    |
-| `intl` | `https://api.modelgo.global` |
+| `intl` | `https://api.modelgo.ai` |
 
 The active environment defaults to `cn`. Switch it, or register your own:
 

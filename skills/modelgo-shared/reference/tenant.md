@@ -23,5 +23,6 @@ FLAGS:
     --env NAME           Operate on a specific env (default: active env from config)
     --config PATH        Config file path (default ~/.modelgo/config.json)
     --store PATH         Credential store path (default ~/.modelgo/auth.json)
+    --json               (list only) Write structured JSON output
     --remote             (list only) Also fetch all account tenants from the server
 ```

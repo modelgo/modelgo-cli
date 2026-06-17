@@ -24,7 +24,7 @@ func TestResolveBuiltInIntl(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if url != "https://api.modelgo.global" {
+	if url != "https://api.modelgo.ai" {
 		t.Fatalf("url = %q", url)
 	}
 }
@@ -99,7 +99,7 @@ func TestListMergesBuiltInAndCustom(t *testing.T) {
 		t.Fatalf("cn entry wrong: %+v", cn)
 	}
 	intl, ok := byName["intl"]
-	if !ok || !intl.BuiltIn || intl.Overridden || intl.URL != "https://api.modelgo.global" {
+	if !ok || !intl.BuiltIn || intl.Overridden || intl.URL != "https://api.modelgo.ai" {
 		t.Fatalf("intl entry wrong: %+v", intl)
 	}
 	test, ok := byName["test"]
