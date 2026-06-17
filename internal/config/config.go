@@ -29,6 +29,11 @@ type Config struct {
 	// Payment holds the x402 pay-per-call preference + credential used by
 	// `modelgo pay`. Nil until the user runs `modelgo pay set`.
 	Payment *PaymentProfile `json:"payment,omitempty"`
+	// APIKeys stores the per-env model API key (mgk_...) used by the OpenAI-
+	// compatible model commands (chat/models/embeddings/call). Keyed by env
+	// name. Populated by `modelgo key set`; the env var MODELGO_API_KEY and the
+	// --api-key flag take precedence over this stored value.
+	APIKeys map[string]string `json:"api_keys,omitempty"`
 }
 
 // PaymentProfile is the stored x402 payment preference + credential. Credential

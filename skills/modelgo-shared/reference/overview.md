@@ -30,6 +30,11 @@ COMMANDS:
     permissions           View account permissions
     logs                  Query call logs and usage statistics
     pay                   Manage x402 pay-per-call payment profile
+    chat                  Call a chat model (/v1/chat/completions)
+    models                List available models (/v1/models)
+    embeddings            Create embeddings (/v1/embeddings)
+    call                  Raw passthrough to any /v1/* model endpoint
+    key                   Manage the stored model API key (per env)
     --version, -v         Print the version
     --help, -h            Show this help
 

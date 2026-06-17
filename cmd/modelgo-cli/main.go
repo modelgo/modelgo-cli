@@ -14,7 +14,9 @@ import (
 	cliauth "github.com/modelgo/modelgo-cli/internal/auth"
 	"github.com/modelgo/modelgo-cli/internal/cmd/balancecmd"
 	"github.com/modelgo/modelgo-cli/internal/cmd/envcmd"
+	"github.com/modelgo/modelgo-cli/internal/cmd/keycmd"
 	"github.com/modelgo/modelgo-cli/internal/cmd/logscmd"
+	"github.com/modelgo/modelgo-cli/internal/cmd/modelcmd"
 	"github.com/modelgo/modelgo-cli/internal/cmd/paycmd"
 	"github.com/modelgo/modelgo-cli/internal/cmd/permissionscmd"
 	"github.com/modelgo/modelgo-cli/internal/cmd/tenantcmd"
@@ -74,6 +76,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return logscmd.Run(args[1:], globalTenant, stdout, stderr)
 	case "pay":
 		return paycmd.Run(args[1:], stdout, stderr)
+	case "chat":
+		return modelcmd.Chat(args[1:], os.Stdin, stdout, stderr)
+	case "models":
+		return modelcmd.Models(args[1:], stdout, stderr)
+	case "embeddings":
+		return modelcmd.Embeddings(args[1:], os.Stdin, stdout, stderr)
+	case "call":
+		return modelcmd.Call(args[1:], os.Stdin, stdout, stderr)
+	case "key":
+		return keycmd.Run(args[1:], os.Stdin, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage(stderr)
@@ -405,6 +417,11 @@ COMMANDS:
     permissions           View account permissions
     logs                  Query call logs and usage statistics
     pay                   Manage x402 pay-per-call payment profile
+    chat                  Call a chat model (/v1/chat/completions)
+    models                List available models (/v1/models)
+    embeddings            Create embeddings (/v1/embeddings)
+    call                  Raw passthrough to any /v1/* model endpoint
+    key                   Manage the stored model API key (per env)
     --version, -v         Print the version
     --help, -h            Show this help
 

@@ -63,6 +63,18 @@ const PAGES = [
     title: "modelgo pay",
     help: [["pay"], ["pay", "methods"], ["pay", "set"], ["pay", "status"], ["pay", "header"], ["pay", "request"]],
   },
+  { skill: "modelgo-call", group: "chat", title: "modelgo chat", help: [["chat"]] },
+  { skill: "modelgo-call", group: "models", title: "modelgo models", help: [["models"]] },
+  { skill: "modelgo-call", group: "embeddings", title: "modelgo embeddings", help: [["embeddings"]] },
+  { skill: "modelgo-call", group: "call", title: "modelgo call", help: [["call"]] },
+  {
+    // `key` uses Go's per-subcommand flag package; the group `--help` lists only
+    // subcommand names, so scrape each subcommand for its own flags.
+    skill: "modelgo-call",
+    group: "key",
+    title: "modelgo key",
+    help: [["key"], ["key", "set"], ["key", "show"], ["key", "remove"]],
+  },
 ];
 
 function ensureBinary() {
