@@ -45,7 +45,7 @@ release: github-remote
 	$(MAKE) skills
 	npm run lint:skills
 	@echo "Cross-compile smoke test (build only, nothing published)..."
-	goreleaser build --snapshot --clean
+	GOWORK=off goreleaser build --snapshot --clean
 	git add package.json package-lock.json skills
 	git diff --cached --quiet -- package.json package-lock.json skills || \
 		git commit -m "chore: release v$(VERSION) (package.json, lock, skills)" -- package.json package-lock.json skills
