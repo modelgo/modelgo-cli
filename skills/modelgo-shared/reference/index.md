@@ -11,6 +11,7 @@ Per-group details are in the sibling `<group>.md` files in this directory.
 | --- | --- |
 | `overview` | [overview.md](overview.md) |
 | `auth` | [auth.md](auth.md) |
+| `update` | [update.md](update.md) |
 | `env` | [env.md](env.md) |
 | `tenant` | [tenant.md](tenant.md) |
 

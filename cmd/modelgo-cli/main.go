@@ -20,6 +20,7 @@ import (
 	"github.com/modelgo/modelgo-cli/internal/cmd/paycmd"
 	"github.com/modelgo/modelgo-cli/internal/cmd/permissionscmd"
 	"github.com/modelgo/modelgo-cli/internal/cmd/tenantcmd"
+	"github.com/modelgo/modelgo-cli/internal/cmd/updatecmd"
 	"github.com/modelgo/modelgo-cli/internal/config"
 	"github.com/modelgo/modelgo-cli/internal/env"
 	"github.com/modelgo/modelgo-cli/internal/version"
@@ -86,6 +87,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return modelcmd.Call(args[1:], os.Stdin, stdout, stderr)
 	case "key":
 		return keycmd.Run(args[1:], os.Stdin, stdout, stderr)
+	case "update":
+		return updatecmd.Run(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printUsage(stderr)
@@ -422,6 +425,7 @@ COMMANDS:
     embeddings            Create embeddings (/v1/embeddings)
     call                  Raw passthrough to any /v1/* model endpoint
     key                   Manage the stored model API key (per env)
+    update                Update modelgo to the latest version
     --version, -v         Print the version
     --help, -h            Show this help
 

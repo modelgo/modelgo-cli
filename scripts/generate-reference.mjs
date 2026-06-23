@@ -44,6 +44,7 @@ const PAGES = [
     title: "modelgo auth",
     help: [["auth"], ["auth", "login"]],
   },
+  { skill: "modelgo-shared", group: "update", title: "modelgo update", help: [["update"]] },
   { skill: "modelgo-shared", group: "env", title: "modelgo env", help: [["env"]] },
   { skill: "modelgo-shared", group: "tenant", title: "modelgo tenant", help: [["tenant"]] },
   { skill: "modelgo-inspect", group: "balance", title: "modelgo balance", help: [["balance"]] },

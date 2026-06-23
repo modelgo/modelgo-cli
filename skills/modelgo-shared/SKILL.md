@@ -68,12 +68,24 @@ the reference file or run `modelgo <command> --help`. (`balance`, `permissions`,
 
 ## Install or upgrade
 
-Run the official install command. It is idempotent — running it again upgrades
-to the latest version and re-syncs skills.
+**Already installed?** Use the built-in self-updater — it checks npm, replaces
+the binary in place (rolling back if the new one fails to run), and re-syncs
+skills:
+
+```bash
+modelgo update            # upgrade to the latest published version
+modelgo update --check    # only report whether a newer version exists
+```
+
+**First install, or `modelgo` not found?** Run the official installer. It is
+idempotent — running it again also upgrades and re-syncs skills:
 
 ```bash
 npx @model-go/cli@latest install
 ```
+
+`modelgo update` only self-replaces when the CLI was installed via npm; for a
+manually-downloaded binary it prints the GitHub release + installer command.
 
 Verify install:
 
@@ -96,6 +108,7 @@ Currently available commands (full flags in [`reference/`](reference/index.md)):
 - `modelgo permissions` — view account permissions and accessible menus
 - `modelgo logs` — query call logs, statistics, and usage summaries
 - `modelgo pay methods/header/request` — inspect x402 channels, build payment headers, or call model APIs through x402 pay-per-call
+- `modelgo update [--check] [--force] [--json]` — self-update the CLI to the latest npm version and re-sync skills
 
 Features not listed in `modelgo --help` are not implemented yet. If the user asks
 for a feature that isn't available, suggest filing an issue (see

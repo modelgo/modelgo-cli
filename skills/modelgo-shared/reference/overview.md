@@ -35,6 +35,7 @@ COMMANDS:
     embeddings            Create embeddings (/v1/embeddings)
     call                  Raw passthrough to any /v1/* model endpoint
     key                   Manage the stored model API key (per env)
+    update                Update modelgo to the latest version
     --version, -v         Print the version
     --help, -h            Show this help
 
