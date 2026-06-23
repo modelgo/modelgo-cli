@@ -1,6 +1,6 @@
 ---
 name: modelgo-inspect
-version: 0.1.5
+version: 0.1.6-rc.1
 description: "Inspect tenant balance, permissions, and call logs. Use when the user asks about billing, balance, quotas, permissions, access control, call history, usage, API costs, or model consumption. Triggers: 余额, 账单, 权限, 调用日志, 用量, balance, billing, permissions, call logs, usage, cost."
 metadata:
   requires:
