@@ -21,9 +21,9 @@ USAGE:
 
 FLAGS:
     --json                 Write structured JSON output
-    --limit N              (list) Number of results, max 100 (default 20)
+    --limit N              (list) Number of results, max 200 (default 20)
     --preset DURATION      (list) Time preset: 1h, 24h, 7d
-    --status STATUS        (list) Filter by status: success/error/timeout
+    --status STATUS        (list) Filter by status: succeeded/failed (aliases: success, error)
     --model MODEL          (list/stats) Filter by model name
     --workspace ID         (list/stats) Filter by workspace ID
     --api-key ID           (list) Filter by API key ID
