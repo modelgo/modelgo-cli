@@ -81,6 +81,74 @@ func TestRunList(t *testing.T) {
 	}
 }
 
+// The gateway only accepts "succeeded"/"failed"; the CLI historically advertised
+// "success"/"error" which silently returned empty results (issue #253). The CLI
+// must normalize the user-friendly aliases to the canonical API values.
+func TestNormalizeStatus(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"success", "succeeded"},
+		{"succeeded", "succeeded"},
+		{"error", "failed"},
+		{"failed", "failed"},
+		{"SUCCESS", "succeeded"},
+		{"  error  ", "failed"},
+		{"", ""},
+		{"timeout", "timeout"}, // unknown: pass through for server to validate
+	}
+	for _, tc := range cases {
+		if got := normalizeStatus(tc.in); got != tc.want {
+			t.Errorf("normalizeStatus(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// The CLI must send the normalized status to the gateway so that the documented
+// alias `--status success` actually matches API rows with status "succeeded".
+func TestRunList_NormalizesStatusFilter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("status"); got != "succeeded" {
+			t.Errorf("status = %q, want succeeded (normalized from success)", got)
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"code": 0, "msg": "ok",
+			"data": map[string]any{"limit": 20, "items": []map[string]any{}},
+		})
+	}))
+	defer srv.Close()
+
+	cfgPath, storePath := setupTestEnv(t, srv.URL)
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"--status", "success", "--config", cfgPath, "--store", storePath}, "", &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
+	}
+}
+
+// The empty-result hint must not suggest the same --preset the user already passed.
+func TestRunList_EmptyHintDoesNotSuggestSamePreset(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"code": 0, "msg": "ok",
+			"data": map[string]any{"limit": 20, "items": []map[string]any{}},
+		})
+	}))
+	defer srv.Close()
+
+	cfgPath, storePath := setupTestEnv(t, srv.URL)
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"--preset", "7d", "--config", cfgPath, "--store", storePath}, "", &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code %d, stderr: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !bytes.Contains([]byte(out), []byte("the last 7 days")) {
+		t.Errorf("expected hint to reflect 7d preset, got: %s", out)
+	}
+	if bytes.Contains([]byte(out), []byte("Try --preset 7d")) {
+		t.Errorf("hint should not suggest the preset already passed, got: %s", out)
+	}
+}
+
 func TestRunDetail(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/open/v1/model-logs/req-abc" {

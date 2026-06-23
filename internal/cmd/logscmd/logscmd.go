@@ -67,7 +67,7 @@ func runList(args []string, tenant string, stdout, stderr io.Writer) int {
 	jsonOut := fs.Bool("json", false, "write structured JSON output")
 	limit := fs.Int("limit", 20, "number of results (max 200)")
 	preset := fs.String("preset", "", "time preset: 1h, 24h, 7d")
-	status := fs.String("status", "", "filter by status: success/error/timeout")
+	status := fs.String("status", "", "filter by status: succeeded/failed (aliases: success, error)")
 	model := fs.String("model", "", "filter by model name")
 	workspace := fs.String("workspace", "", "filter by workspace ID")
 	apiKey := fs.String("api-key", "", "filter by API key ID")
@@ -95,7 +95,7 @@ func runList(args []string, tenant string, stdout, stderr io.Writer) int {
 		params.Set("preset", *preset)
 	}
 	if *status != "" {
-		params.Set("status", *status)
+		params.Set("status", normalizeStatus(*status))
 	}
 	if *model != "" {
 		params.Set("model", *model)
@@ -123,23 +123,26 @@ func runList(args []string, tenant string, stdout, stderr io.Writer) int {
 
 	if len(logs) == 0 {
 		presetHint := "the last 24h"
+		wider := " Try --preset 7d for a wider range."
 		if *preset != "" {
 			presetHint = fmt.Sprintf("the last %s", expandPreset(*preset))
+			// Don't suggest the preset the user already passed.
+			if *preset == "7d" {
+				wider = " Try a wider --preset or remove other filters."
+			}
 		}
-		fmt.Fprintf(stdout, "No call logs found in %s. Try --preset 7d for a wider range.\n", presetHint)
+		fmt.Fprintf(stdout, "No call logs found in %s.%s\n", presetHint, wider)
 		return 0
 	}
 
-	fmt.Fprintf(stdout, "%-24s %-20s %-24s %-10s %8s %10s %8s\n",
+	// REQUEST_ID column is wide enough for a full "gw_"+UUID id (39 chars) so it
+	// stays copy-pasteable into `logs <id>`; truncating it produced HTTP 404s.
+	fmt.Fprintf(stdout, "%-40s %-20s %-24s %-10s %8s %10s %8s\n",
 		"REQUEST_ID", "STARTED_AT", "MODEL", "STATUS", "TOKENS", "LATENCY", "COST")
 	for _, l := range logs {
 		started := "-"
 		if !l.StartedAt.IsZero() {
 			started = l.StartedAt.Format("2006-01-02 15:04:05")
-		}
-		reqID := l.RequestID
-		if len(reqID) > 22 {
-			reqID = reqID[:22]
 		}
 		modelName := l.RequestedModel
 		if len(modelName) > 22 {
@@ -148,8 +151,8 @@ func runList(args []string, tenant string, stdout, stderr io.Writer) int {
 		symbol := currencySymbol(l.Currency)
 		cost := fmt.Sprintf("%s%.2f", symbol, l.FinalAmount.Float())
 		latency := fmt.Sprintf("%dms", l.LatencyMs)
-		fmt.Fprintf(stdout, "%-24s %-20s %-24s %-10s %8d %10s %8s\n",
-			reqID, started, modelName, l.Status, l.TotalTokens, latency, cost)
+		fmt.Fprintf(stdout, "%-40s %-20s %-24s %-10s %8d %10s %8s\n",
+			l.RequestID, started, modelName, l.Status, l.TotalTokens, latency, cost)
 	}
 
 	if len(logs) >= *limit {
@@ -627,6 +630,21 @@ func normalizeDate(v string) string {
 	return v
 }
 
+// normalizeStatus maps user-friendly status aliases to the API's canonical
+// values. The gateway only accepts "succeeded"/"failed"; historically the CLI
+// advertised "success"/"error" which silently returned empty results. We accept
+// both and pass any other value through for the server to validate.
+func normalizeStatus(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "success", "succeeded":
+		return "succeeded"
+	case "error", "failed":
+		return "failed"
+	default:
+		return s
+	}
+}
+
 func expandPreset(p string) string {
 	switch p {
 	case "1h":
@@ -652,9 +670,9 @@ USAGE:
 
 FLAGS:
     --json                 Write structured JSON output
-    --limit N              (list) Number of results, max 100 (default 20)
+    --limit N              (list) Number of results, max 200 (default 20)
     --preset DURATION      (list) Time preset: 1h, 24h, 7d
-    --status STATUS        (list) Filter by status: success/error/timeout
+    --status STATUS        (list) Filter by status: succeeded/failed (aliases: success, error)
     --model MODEL          (list/stats) Filter by model name
     --workspace ID         (list/stats) Filter by workspace ID
     --api-key ID           (list) Filter by API key ID
