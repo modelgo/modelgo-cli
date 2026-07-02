@@ -1,6 +1,6 @@
 ---
 name: modelgo-shared
-version: 0.1.6-rc.1
+version: 0.1.6
 description: "modelgo-cli setup, command routing, and troubleshooting. Use when the user first runs modelgo, sees permission/scope errors, needs to update, asks about installation, or when you need to pick which modelgo command fits an intent. Triggers: 安装 modelgo, modelgo install, modelgo upgrade, modelgo update, modelgo permission, modelgo error, modelgo setup, install modelgo-cli."
 metadata:
   requires:
