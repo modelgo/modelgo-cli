@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 const { execFileSync, execFile } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 const p = require("@clack/prompts");
 const { semverLessThan } = require("./install.js");
 
@@ -106,6 +108,25 @@ function getGloballyInstalledVersion() {
     const out = runSilent("npm", ["list", "-g", PKG], { timeout: 15000 });
     const match = out.toString().match(/@(\d+\.\d+\.\d+[^\s]*)/);
     return match ? match[1] : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// `npx <pkg> install` prepends this run's own temporary package directory
+// (~/.npm/_npx/<hash>/node_modules/.bin) to PATH, ahead of the real global
+// npm bin dir. A bare `execFileSync("modelgo", ...)` below would then resolve
+// back to *this* npx-cached copy — whose bin/modelgo was never downloaded,
+// since install.js intentionally skips the binary fetch under npx and defers
+// to the `npm install -g` in stepInstallGlobally. Resolve the actual global
+// bin path explicitly so env/auth steps always run the real installed CLI.
+function getGlobalModelgoBin() {
+  try {
+    const prefix = runSilent("npm", ["prefix", "-g"], { timeout: 15000 }).toString().trim();
+    const binPath = isWindows
+      ? path.join(prefix, "modelgo.cmd")
+      : path.join(prefix, "bin", "modelgo");
+    return fs.existsSync(binPath) ? binPath : null;
   } catch (_) {
     return null;
   }
@@ -230,8 +251,8 @@ async function stepSelectEnv(msg) {
     msg
   );
   try {
-    // `modelgo` is on PATH after the global install in stepInstallGlobally.
-    runSilent("modelgo", ["env", "use", env], { timeout: 15000 });
+    const modelgoBin = getGlobalModelgoBin() || "modelgo";
+    runSilent(modelgoBin, ["env", "use", env], { timeout: 15000 });
     p.log.success(fmt(msg.envDone, env));
   } catch (_) {
     p.log.warn(fmt(msg.envFail, env));
@@ -247,7 +268,8 @@ async function stepAuthLogin(msg) {
   try {
     // `auth login` prints a verification URL and blocks polling until the user
     // approves in the browser — inherit stdio so the URL and progress show.
-    execCmd("modelgo", ["auth", "login"], { stdio: "inherit" });
+    const modelgoBin = getGlobalModelgoBin() || "modelgo";
+    execCmd(modelgoBin, ["auth", "login"], { stdio: "inherit" });
     p.log.success(msg.authDone);
   } catch (_) {
     p.log.warn(msg.authFail);
